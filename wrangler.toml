@@ -16,4 +16,4 @@ class_name = "AppStoreDO"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["AppStoreDO"]
+new_sqlite_classes = ["AppStoreDO"]
