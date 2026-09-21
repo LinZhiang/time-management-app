@@ -1,24 +1,15 @@
-const WORKER_ORIGIN = 'https://time-management-app.806154588.workers.dev'
+import { createApp } from '../../server/app.ts'
+import { createKvRunner, createMemoryRunner } from '../../server/store-kv.ts'
 
-export async function onRequest(context: { request: Request; env?: { WORKER_ORIGIN?: string } }) {
-  const origin = context.env?.WORKER_ORIGIN || WORKER_ORIGIN
-  const source = new URL(context.request.url)
-  const target = new URL(source.pathname + source.search, origin)
-  const method = context.request.method
-  const headers = new Headers(context.request.headers)
-  headers.delete('host')
-  headers.delete('cf-connecting-ip')
-  headers.delete('cf-ipcountry')
-  headers.delete('x-forwarded-for')
+interface KVNamespace {
+  get(key: string, options: { type: 'json' }): Promise<unknown>
+  put(key: string, value: string): Promise<void>
+}
 
-  const init: RequestInit & { duplex?: 'half' } = {
-    method,
-    headers,
-    redirect: 'manual',
-  }
-  if (method !== 'GET' && method !== 'HEAD') {
-    init.body = context.request.body
-    init.duplex = 'half'
-  }
-  return fetch(target, init)
+export async function onRequest(context: {
+  request: Request
+  env?: { STORE?: KVNamespace }
+}) {
+  const runner = context.env?.STORE ? createKvRunner(context.env.STORE) : createMemoryRunner()
+  return createApp(runner).fetch(context.request)
 }

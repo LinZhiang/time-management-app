@@ -1,19 +1,7 @@
-name = "time-management-app"
-main = "server/worker.ts"
+name = "taihui-time"
 compatibility_date = "2025-09-21"
-workers_dev = true
+pages_build_output_dir = "./dist"
 
-[assets]
-directory = "./dist"
-binding = "ASSETS"
-html_handling = "auto-trailing-slash"
-not_found_handling = "single-page-application"
-run_worker_first = ["/api/*"]
-
-[[durable_objects.bindings]]
-name = "APP_STORE"
-class_name = "AppStoreDO"
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["AppStoreDO"]
+[[kv_namespaces]]
+binding = "STORE"
+id = "674ce040b97944c48b1af76c9382ab08"
