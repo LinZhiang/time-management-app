@@ -7,7 +7,7 @@
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite",
     "dev:server": "tsx server/index.ts",
-    "build": "vue-tsc -b && vite build",
+    "build": "vue-tsc -b && vite build && node scripts/cf-pages-deploy.mjs",
     "start": "tsx server/index.ts",
     "preview": "vite preview"
   },

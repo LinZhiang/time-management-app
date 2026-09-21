@@ -53,6 +53,9 @@ export default {
       const id = env.APP_STORE.idFromName('global')
       return env.APP_STORE.get(id).fetch(request)
     }
-    return env.ASSETS.fetch(request)
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request)
+    }
+    return new Response('Not found', { status: 404 })
   },
 }
