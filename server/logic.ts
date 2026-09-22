@@ -2,6 +2,7 @@ import { dateKey, nextDayKey, startOfDay } from '../shared/date.ts'
 import { addCategoryTime, cloneDay, emptyDay, ensureDay } from '../shared/record.ts'
 import {
   EXERCISE_MIN_MS,
+  POMODORO_BUFFER_MS,
   REST_MINUTES_MAX,
   REST_MINUTES_MIN,
   STUDY_MINUTES_MAX,
@@ -76,6 +77,43 @@ function idlePomodoro(store: AppStore) {
   store.pomodoro.startedAt = null
 }
 
+function studyDurationMs(store: AppStore) {
+  return store.pomodoro.settings.studyMinutes * 60 * 1000
+}
+
+function applyEnterBuffer(store: AppStore, now: number) {
+  if (store.pomodoro.phase !== 'studying' || !store.pomodoro.startedAt) return
+  store.pomodoro.phase = 'studyDone'
+  store.pomodoro.startedAt = Math.min(now, store.pomodoro.startedAt + studyDurationMs(store))
+}
+
+function applyEnterRest(store: AppStore, now: number) {
+  if (store.pomodoro.phase !== 'studying' && store.pomodoro.phase !== 'studyDone') return
+  if (store.activeTimer?.category === 'study') {
+    stopActiveTimer(store, now)
+  }
+  const day = ensureDay(store, dateKey(now))
+  day.hasActivity = true
+  day.pomodoroRounds.push({
+    studyMinutes: store.pomodoro.settings.studyMinutes,
+    restMinutes: store.pomodoro.settings.restMinutes,
+    completedAt: now,
+  })
+  day.pomodoroCount += 1
+  store.pomodoro.phase = 'resting'
+  store.pomodoro.startedAt = now
+}
+
+function syncPomodoro(store: AppStore, now: number) {
+  const pomodoro = store.pomodoro
+  if (pomodoro.phase === 'studying' && pomodoro.startedAt && now - pomodoro.startedAt >= studyDurationMs(store)) {
+    applyEnterBuffer(store, now)
+  }
+  if (pomodoro.phase === 'studyDone' && pomodoro.startedAt && now - pomodoro.startedAt >= POMODORO_BUFFER_MS) {
+    applyEnterRest(store, pomodoro.startedAt + POMODORO_BUFFER_MS)
+  }
+}
+
 function requireNote(category: TimerCategory, otherNote?: string) {
   if (category !== 'other') return
   if (!otherNote?.trim()) {
@@ -85,6 +123,7 @@ function requireNote(category: TimerCategory, otherNote?: string) {
 
 export function syncStore(store: AppStore, now = Date.now()) {
   rollover(store, now)
+  syncPomodoro(store, now)
   return store
 }
 
@@ -121,7 +160,7 @@ export function stopTimer(store: AppStore, now = Date.now()) {
     idlePomodoro(store)
     return
   }
-  if (store.pomodoro.phase === 'studying') idlePomodoro(store)
+  if (store.pomodoro.phase === 'studying' || store.pomodoro.phase === 'studyDone') idlePomodoro(store)
   stopActiveTimer(store, now)
 }
 
@@ -140,30 +179,30 @@ export function startPomodoro(store: AppStore, now = Date.now()) {
   store.pomodoro.startedAt = now
 }
 
-export function enterPomodoroRest(store: AppStore, now = Date.now()) {
+export function enterPomodoroBuffer(store: AppStore, now = Date.now()) {
   syncStore(store, now)
+  if (store.pomodoro.phase === 'studyDone' || store.pomodoro.phase === 'resting') return
   if (store.pomodoro.phase !== 'studying' || !store.pomodoro.startedAt) {
     throw new ApiError(400, '当前不在番茄学习中')
   }
-  const studyMinutes = store.pomodoro.settings.studyMinutes
-  if (store.activeTimer?.category === 'study') {
-    stopActiveTimer(store, now)
+  applyEnterBuffer(store, now)
+}
+
+export function enterPomodoroRest(store: AppStore, now = Date.now()) {
+  syncStore(store, now)
+  if (store.pomodoro.phase === 'resting') return
+  if (store.pomodoro.phase !== 'studying' && store.pomodoro.phase !== 'studyDone') {
+    throw new ApiError(400, '当前不在番茄学习中')
   }
-  const day = ensureDay(store, dateKey(now))
-  day.hasActivity = true
-  day.pomodoroRounds.push({
-    studyMinutes,
-    restMinutes: store.pomodoro.settings.restMinutes,
-    completedAt: now,
-  })
-  day.pomodoroCount += 1
-  store.pomodoro.phase = 'resting'
-  store.pomodoro.startedAt = now
+  applyEnterRest(store, now)
 }
 
 export function exitPomodoro(store: AppStore, now = Date.now()) {
   syncStore(store, now)
-  if (store.pomodoro.phase === 'studying' && store.activeTimer?.category === 'study') {
+  if (
+    (store.pomodoro.phase === 'studying' || store.pomodoro.phase === 'studyDone') &&
+    store.activeTimer?.category === 'study'
+  ) {
     stopActiveTimer(store, now)
   }
   idlePomodoro(store)

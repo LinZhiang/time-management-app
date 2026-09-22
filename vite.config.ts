@@ -52,6 +52,14 @@ export default defineConfig({
             urlPattern: /\/api\//,
             handler: 'NetworkOnly',
           },
+          {
+            urlPattern: /\/audio\/.*\.dat$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'tm-audio',
+              expiration: { maxEntries: 8 },
+            },
+          },
         ],
       },
       devOptions: {

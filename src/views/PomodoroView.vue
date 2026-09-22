@@ -10,6 +10,7 @@ import {
   REST_MINUTES_MIN,
   STUDY_MINUTES_MAX,
   STUDY_MINUTES_MIN,
+  POMODORO_BUFFER_MS,
 } from '../../shared/types.ts'
 
 const {
@@ -20,13 +21,14 @@ const {
   pomodoro,
   handlePomodoroSettings,
   handleStartPomodoro,
+  handleEnterBuffer,
   handleEnterRest,
   handleExitPomodoro,
 } = useAppState()
 
 const studyMinutes = ref(pomodoro.value?.settings.studyMinutes ?? 25)
 const restMinutes = ref(pomodoro.value?.settings.restMinutes ?? 10)
-const autoRestLock = ref(false)
+const autoPhaseLock = ref(false)
 
 watch(
   () => pomodoro.value?.settings,
@@ -42,7 +44,9 @@ const phase = computed(() => pomodoro.value?.phase ?? 'idle')
 const targetMs = computed(() => {
   const settings = pomodoro.value?.settings
   if (!settings) return 0
-  return (phase.value === 'resting' ? settings.restMinutes : settings.studyMinutes) * 60 * 1000
+  if (phase.value === 'resting') return settings.restMinutes * 60 * 1000
+  if (phase.value === 'studyDone') return POMODORO_BUFFER_MS
+  return settings.studyMinutes * 60 * 1000
 })
 
 const elapsedMs = computed(() => {
@@ -58,32 +62,48 @@ const progress = computed(() => {
 
 const modeLabel = computed(() => {
   if (phase.value === 'studying') return '番茄学习中'
+  if (phase.value === 'studyDone') return '学习缓冲中'
   if (phase.value === 'resting') return '休息中'
   return '休整日番茄学习'
 })
 
 const hintText = computed(() => {
   if (phase.value === 'studying') return '学习时间会计入时间管理'
+  if (phase.value === 'studyDone') return '缓冲仍计入学习时间，可随时暂停进入休息'
   if (phase.value === 'resting') return '休息中，已停止记录学习时间'
   return '开启后会同步开始学习时间，并关掉其他计时'
 })
 
-const ringVariant = computed(() => (phase.value === 'resting' ? 'rest' : 'study'))
+const ringVariant = computed(() => {
+  if (phase.value === 'resting') return 'rest'
+  if (phase.value === 'studyDone') return 'alert'
+  return 'study'
+})
 const displayTime = computed(() => formatDuration(phase.value === 'idle' ? targetMs.value || studyMinutes.value * 60 * 1000 : remainingMs.value))
 
 watch(remainingMs, async (value) => {
-  if (phase.value !== 'studying' || autoRestLock.value) return
-  if (value > 0) return
-  autoRestLock.value = true
-  try {
-    await handleEnterRest()
-  } catch {
-    autoRestLock.value = false
+  if (autoPhaseLock.value || value > 0) return
+  if (phase.value === 'studying') {
+    autoPhaseLock.value = true
+    try {
+      await handleEnterBuffer()
+    } catch {
+      autoPhaseLock.value = false
+    }
+    return
+  }
+  if (phase.value === 'studyDone') {
+    autoPhaseLock.value = true
+    try {
+      await handleEnterRest()
+    } catch {
+      autoPhaseLock.value = false
+    }
   }
 })
 
-watch(phase, (value) => {
-  if (value !== 'studying') autoRestLock.value = false
+watch(phase, () => {
+  autoPhaseLock.value = false
 })
 
 async function saveSettings() {
@@ -99,7 +119,7 @@ async function handlePrimary() {
     await handleStartPomodoro()
     return
   }
-  if (phase.value === 'studying') {
+  if (phase.value === 'studying' || phase.value === 'studyDone') {
     await handleEnterRest()
     return
   }
@@ -108,6 +128,7 @@ async function handlePrimary() {
 
 const primaryLabel = computed(() => {
   if (phase.value === 'idle') return '开启番茄学习'
+  if (phase.value === 'studyDone') return '暂停'
   if (phase.value === 'studying') return '进入休息'
   return '开始下一轮'
 })
@@ -120,7 +141,7 @@ const primaryLabel = computed(() => {
     <section class="card pause-day-banner">
       <p class="pause-day-banner__title">番茄学习</p>
       <p class="pause-day-banner__desc">
-        学习 22～52 分钟，休息 7～15 分钟。开启后同步时间管理中的学习时间；进入休息或退出后停止记录。
+        学习 22～52 分钟，休息 7～15 分钟。学习结束后有 10 分钟缓冲，仍计入学习时间，可随时暂停。
       </p>
     </section>
 

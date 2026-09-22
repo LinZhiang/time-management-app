@@ -1,5 +1,6 @@
 import { computed, ref, shallowRef } from 'vue'
 import {
+  enterPomodoroBuffer,
   enterPomodoroRest,
   exitPomodoro,
   fetchState,
@@ -11,7 +12,14 @@ import {
   stopTimer,
 } from '../api/client'
 import { dateKey } from '../../shared/date.ts'
-import type { LiveState, PomodoroSettings, TimeCategory } from '../../shared/types.ts'
+import type { LiveState, PomodoroPhase, PomodoroSettings, TimeCategory } from '../../shared/types.ts'
+import {
+  playExerciseStartSound,
+  playRestStartSound,
+  playStartSound,
+  playStudyStartSound,
+  unlockAudio,
+} from '../utils/audio'
 
 const state = shallowRef<LiveState | null>(null)
 const now = ref(Date.now())
@@ -20,11 +28,22 @@ const error = ref('')
 let tickTimer: ReturnType<typeof setInterval> | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let started = false
+let lastPomodoroPhase: PomodoroPhase | null = null
+
+function playPomodoroPhaseSound(previous: PomodoroPhase | null, next: PomodoroPhase) {
+  if (!previous || previous === next) return
+  if (next === 'studying') playStudyStartSound()
+  else if (next === 'studyDone') playStartSound()
+  else if (next === 'resting') playRestStartSound()
+}
 
 function applyState(next: LiveState) {
+  const previousPhase = lastPomodoroPhase
   state.value = next
   now.value = next.now || Date.now()
   error.value = ''
+  lastPomodoroPhase = next.pomodoro.phase
+  playPomodoroPhaseSound(previousPhase, next.pomodoro.phase)
 }
 
 async function run<T>(fn: () => Promise<T>) {
@@ -74,6 +93,7 @@ export async function setupAppState() {
 export function teardownAppState() {
   if (!started) return
   started = false
+  lastPomodoroPhase = null
   if (tickTimer) clearInterval(tickTimer)
   if (pollTimer) clearInterval(pollTimer)
   tickTimer = null
@@ -111,10 +131,14 @@ export function useAppState() {
   }
 
   async function handleStartTimer(category: TimeCategory, otherNote?: string) {
+    unlockAudio()
+    playStartSound()
     applyState(await run(() => startTimer(category, otherNote)))
   }
 
   async function handleStopTimer() {
+    unlockAudio()
+    playStartSound()
     applyState(await run(() => stopTimer()))
   }
 
@@ -123,10 +147,17 @@ export function useAppState() {
   }
 
   async function handleStartPomodoro() {
+    unlockAudio()
     applyState(await run(() => startPomodoro()))
   }
 
+  async function handleEnterBuffer() {
+    unlockAudio()
+    applyState(await run(() => enterPomodoroBuffer()))
+  }
+
   async function handleEnterRest() {
+    unlockAudio()
     applyState(await run(() => enterPomodoroRest()))
   }
 
@@ -135,6 +166,8 @@ export function useAppState() {
   }
 
   async function handleStartExercise() {
+    unlockAudio()
+    playExerciseStartSound()
     applyState(await run(() => startExercise()))
   }
 
@@ -159,6 +192,7 @@ export function useAppState() {
     handleStopTimer,
     handlePomodoroSettings,
     handleStartPomodoro,
+    handleEnterBuffer,
     handleEnterRest,
     handleExitPomodoro,
     handleStartExercise,

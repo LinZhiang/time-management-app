@@ -1,4 +1,10 @@
-import { DEFAULT_POMODORO_SETTINGS, type AppStore } from '../shared/types.ts'
+import { DEFAULT_POMODORO_SETTINGS, type AppStore, type PomodoroPhase } from '../shared/types.ts'
+
+const POMODORO_PHASES: PomodoroPhase[] = ['idle', 'studying', 'studyDone', 'resting']
+
+function normalizePhase(phase: unknown): PomodoroPhase {
+  return POMODORO_PHASES.includes(phase as PomodoroPhase) ? (phase as PomodoroPhase) : 'idle'
+}
 
 export function emptyStore(): AppStore {
   return {
@@ -21,7 +27,7 @@ export function normalizeStore(raw: Partial<AppStore> | null | undefined): AppSt
     ...base,
     ...raw,
     pomodoro: {
-      phase: raw.pomodoro?.phase ?? 'idle',
+      phase: normalizePhase(raw.pomodoro?.phase),
       startedAt: raw.pomodoro?.startedAt ?? null,
       settings: {
         ...DEFAULT_POMODORO_SETTINGS,

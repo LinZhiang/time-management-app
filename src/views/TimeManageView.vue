@@ -86,7 +86,7 @@ function runningNote(category: TimeCategory) {
             :disabled="loading || !isRunning(category)"
             @click="handleClose(category)"
           >
-            关闭
+            暂停
           </button>
         </div>
       </article>

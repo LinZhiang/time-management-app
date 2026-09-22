@@ -77,6 +77,10 @@ export function startPomodoro() {
   return request<LiveState>('/api/pomodoro/start', { method: 'POST', body: '{}' })
 }
 
+export function enterPomodoroBuffer() {
+  return request<LiveState>('/api/pomodoro/buffer', { method: 'POST', body: '{}' })
+}
+
 export function enterPomodoroRest() {
   return request<LiveState>('/api/pomodoro/rest', { method: 'POST', body: '{}' })
 }

@@ -56,8 +56,10 @@ export interface PomodoroSettings {
   restMinutes: number
 }
 
+export type PomodoroPhase = 'idle' | 'studying' | 'studyDone' | 'resting'
+
 export interface PomodoroState {
-  phase: 'idle' | 'studying' | 'resting'
+  phase: PomodoroPhase
   startedAt: number | null
   settings: PomodoroSettings
 }
@@ -91,6 +93,9 @@ export const DEFAULT_POMODORO_SETTINGS: PomodoroSettings = {
   studyMinutes: 25,
   restMinutes: 10,
 }
+
+/** 番茄学习结束后的缓冲，仍计入学习时间 */
+export const POMODORO_BUFFER_MS = 10 * 60 * 1000
 
 export const STUDY_MINUTES_MIN = 22
 export const STUDY_MINUTES_MAX = 52

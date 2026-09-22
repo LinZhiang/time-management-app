@@ -5,6 +5,7 @@ import type { AppStore, PomodoroSettings, TimeCategory } from '../shared/types.t
 import {
   ApiError,
   createPlan,
+  enterPomodoroBuffer,
   enterPomodoroRest,
   exitPomodoro,
   getPlan,
@@ -152,6 +153,20 @@ export function createApp(withStore: StoreRunner) {
       await requireAuth(c)
       const state = await withStore((store) => {
         startPomodoro(store)
+        return liveState(store)
+      })
+      return c.json(state)
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.post('/api/pomodoro/buffer', async (c) => {
+    try {
+      await requireAuth(c)
+      const state = await withStore((store) => {
+        enterPomodoroBuffer(store)
         return liveState(store)
       })
       return c.json(state)
