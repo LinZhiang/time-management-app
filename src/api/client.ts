@@ -1,4 +1,18 @@
-import type { DayRecord, LiveState, Plan, PomodoroSettings, TimeCategory } from '../../shared/types.ts'
+import type {
+  DayRecord,
+  LiveState,
+  LongTermOverview,
+  LongTermPeriod,
+  Plan,
+  PomodoroSettings,
+  TimeCategory,
+} from '../../shared/types.ts'
+
+export interface LongTermPayload {
+  overview: LongTermOverview
+  periods: LongTermPeriod[]
+  currentPeriods: LongTermPeriod[]
+}
 
 const TOKEN_KEY = 'tm-auth-token'
 
@@ -132,4 +146,44 @@ export function createPlan(title: string, detail: string) {
 
 export function fetchPlan(id: string) {
   return request<{ plan: Plan }>(`/api/plans/${id}`)
+}
+
+export function fetchLongTerm() {
+  return request<LongTermPayload>('/api/long-term')
+}
+
+export function saveLongTermOverview(title: string, detail: string) {
+  return request<LongTermPayload>('/api/long-term/overview', {
+    method: 'POST',
+    body: JSON.stringify({ title, detail }),
+  })
+}
+
+export function createLongTermPeriod(input: {
+  title: string
+  detail: string
+  startDate: string
+  endDate: string
+}) {
+  return request<LongTermPayload>('/api/long-term/periods', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateLongTermPeriod(
+  id: string,
+  input: { title: string; detail: string; startDate: string; endDate: string },
+) {
+  return request<LongTermPayload>(`/api/long-term/periods/${id}`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteLongTermPeriod(id: string) {
+  return request<LongTermPayload>(`/api/long-term/periods/${id}/delete`, {
+    method: 'POST',
+    body: '{}',
+  })
 }

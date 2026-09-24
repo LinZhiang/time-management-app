@@ -45,6 +45,26 @@ export interface Plan {
   createdAt: number
 }
 
+export interface LongTermOverview {
+  title: string
+  detail: string
+  updatedAt: number
+}
+
+export interface LongTermPeriod {
+  id: string
+  title: string
+  detail: string
+  startDate: string
+  endDate: string
+  createdAt: number
+}
+
+export interface LongTermPlan {
+  overview: LongTermOverview
+  periods: LongTermPeriod[]
+}
+
 export interface ActiveTimer {
   category: TimerCategory
   startedAt: number
@@ -68,6 +88,7 @@ export interface AppStore {
   authToken: string | null
   days: Record<string, DayRecord>
   plans: Plan[]
+  longTerm: LongTermPlan
   activeTimer: ActiveTimer | null
   pomodoro: PomodoroState
 }

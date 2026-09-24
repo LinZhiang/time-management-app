@@ -77,3 +77,12 @@ export function weekdayIndex(date: string): number {
 export function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }
+
+export function isValidDateKey(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(startOfDay(value))
+}
+
+export function formatDateRangeLabel(from: string, to: string) {
+  if (from === to) return formatDateLabel(from)
+  return `${formatDateLabel(from)} 至 ${formatDateLabel(to)}`
+}

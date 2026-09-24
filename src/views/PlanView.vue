@@ -1,5 +1,8 @@
 <script setup lang="ts">
+defineOptions({ name: 'PlanView' })
+
 import { computed, onActivated, ref, watch } from 'vue'
+import LongTermPanel from '../components/LongTermPanel.vue'
 import { createPlan, fetchPlans } from '../api/client'
 import {
   addDays,
@@ -15,6 +18,7 @@ import {
 } from '../../shared/date.ts'
 import type { Plan } from '../../shared/types.ts'
 
+const pageTab = ref<'daily' | 'longterm'>('daily')
 const viewMode = ref<'list' | 'calendar'>('list')
 const rangeMode = ref<'month' | 'year'>('month')
 const today = dateKey()
@@ -144,6 +148,28 @@ function openDay(date: string) {
 
 <template>
   <div class="page plan-page">
+    <div class="page-tabs" role="tablist">
+      <button
+        class="chip"
+        :class="{ 'chip--active': pageTab === 'daily' }"
+        type="button"
+        @click="pageTab = 'daily'"
+      >
+        日程安排
+      </button>
+      <button
+        class="chip"
+        :class="{ 'chip--active': pageTab === 'longterm' }"
+        type="button"
+        @click="pageTab = 'longterm'"
+      >
+        长期安排
+      </button>
+    </div>
+
+    <LongTermPanel v-if="pageTab === 'longterm'" />
+
+    <template v-else>
     <div class="toolbar">
       <div class="scope-tabs">
         <button class="chip" :class="{ 'chip--active': viewMode === 'list' }" type="button" @click="viewMode = 'list'">
@@ -269,6 +295,7 @@ function openDay(date: string) {
         </div>
       </div>
     </Teleport>
+    </template>
   </div>
 </template>
 
@@ -279,6 +306,7 @@ function openDay(date: string) {
   gap: 14px;
 }
 
+.page-tabs,
 .toolbar,
 .scope-tabs {
   display: flex;

@@ -4,20 +4,25 @@ import { dateKey, monthEnd, monthStart } from '../shared/date.ts'
 import type { AppStore, PomodoroSettings, TimeCategory } from '../shared/types.ts'
 import {
   ApiError,
+  createLongTermPeriod,
   createPlan,
+  deleteLongTermPeriod,
   enterPomodoroBuffer,
   enterPomodoroRest,
   exitPomodoro,
+  getLongTerm,
   getPlan,
   liveState,
   listLogs,
   listPlans,
+  saveLongTermOverview,
   startExercise,
   startPomodoro,
   startTimer,
   stopExercise,
   stopTimer,
   sumRange,
+  updateLongTermPeriod,
   updatePomodoroSettings,
 } from './logic.ts'
 import type { StoreRunner } from './store-state.ts'
@@ -53,7 +58,7 @@ export function createApp(withStore: StoreRunner) {
     cors({
       origin: '*',
       allowHeaders: ['Content-Type', 'Authorization'],
-      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     }),
   )
 
@@ -298,6 +303,76 @@ export function createApp(withStore: StoreRunner) {
       await requireAuth(c)
       const plan = await withStore((store) => getPlan(store, c.req.param('id')))
       return c.json({ plan })
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.get('/api/long-term', async (c) => {
+    try {
+      await requireAuth(c)
+      const result = await withStore((store) => getLongTerm(store))
+      return c.json(result)
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.post('/api/long-term/overview', async (c) => {
+    try {
+      await requireAuth(c)
+      const body = await c.req.json<{ title?: string; detail?: string }>()
+      const result = await withStore((store) => {
+        saveLongTermOverview(store, body.title ?? '', body.detail ?? '')
+        return getLongTerm(store)
+      })
+      return c.json(result)
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.post('/api/long-term/periods', async (c) => {
+    try {
+      await requireAuth(c)
+      const body = await c.req.json<{ title?: string; detail?: string; startDate?: string; endDate?: string }>()
+      const result = await withStore((store) => {
+        createLongTermPeriod(store, body)
+        return getLongTerm(store)
+      })
+      return c.json(result)
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.post('/api/long-term/periods/:id', async (c) => {
+    try {
+      await requireAuth(c)
+      const body = await c.req.json<{ title?: string; detail?: string; startDate?: string; endDate?: string }>()
+      const result = await withStore((store) => {
+        updateLongTermPeriod(store, c.req.param('id'), body)
+        return getLongTerm(store)
+      })
+      return c.json(result)
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.post('/api/long-term/periods/:id/delete', async (c) => {
+    try {
+      await requireAuth(c)
+      const result = await withStore((store) => {
+        deleteLongTermPeriod(store, c.req.param('id'))
+        return getLongTerm(store)
+      })
+      return c.json(result)
     } catch (error) {
       const { status, body } = jsonError(error)
       return c.json(body, status)

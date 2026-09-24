@@ -1,4 +1,4 @@
-import { dateKey, nextDayKey, startOfDay } from '../shared/date.ts'
+import { dateKey, isValidDateKey, nextDayKey, startOfDay } from '../shared/date.ts'
 import { addCategoryTime, cloneDay, emptyDay, ensureDay } from '../shared/record.ts'
 import {
   EXERCISE_MIN_MS,
@@ -10,6 +10,7 @@ import {
   type ActiveTimer,
   type AppStore,
   type DayRecord,
+  type LongTermPeriod,
   type Plan,
   type PomodoroSettings,
   type TimeCategory,
@@ -276,6 +277,105 @@ export function getPlan(store: AppStore, id: string) {
   const plan = store.plans.find((item) => item.id === id)
   if (!plan) throw new ApiError(404, '计划不存在')
   return plan
+}
+
+function periodSpan(period: LongTermPeriod) {
+  return Math.max(0, startOfDay(period.endDate) - startOfDay(period.startDate))
+}
+
+export function isPeriodCurrent(period: LongTermPeriod, today = dateKey()) {
+  return period.startDate <= today && today <= period.endDate
+}
+
+export function listCurrentLongTermPeriods(store: AppStore, now = Date.now()) {
+  const today = dateKey(now)
+  return store.longTerm.periods
+    .filter((period) => isPeriodCurrent(period, today))
+    .sort((a, b) => periodSpan(a) - periodSpan(b) || a.startDate.localeCompare(b.startDate))
+}
+
+export function getLongTerm(store: AppStore, now = Date.now()) {
+  const periods = [...store.longTerm.periods].sort((a, b) => {
+    const today = dateKey(now)
+    const rank = (period: LongTermPeriod) => {
+      if (isPeriodCurrent(period, today)) return 0
+      if (period.startDate > today) return 1
+      return 2
+    }
+    return rank(a) - rank(b) || a.startDate.localeCompare(b.startDate) || b.createdAt - a.createdAt
+  })
+  return {
+    overview: store.longTerm.overview,
+    periods,
+    currentPeriods: listCurrentLongTermPeriods(store, now),
+  }
+}
+
+export function saveLongTermOverview(store: AppStore, title: string, detail: string, now = Date.now()) {
+  store.longTerm.overview = {
+    title: title.trim(),
+    detail: detail.trim(),
+    updatedAt: now,
+  }
+  return store.longTerm.overview
+}
+
+function requirePeriodRange(startDate: string, endDate: string) {
+  if (!isValidDateKey(startDate) || !isValidDateKey(endDate)) {
+    throw new ApiError(400, '请选择有效的开始和结束日期')
+  }
+  if (startDate > endDate) {
+    throw new ApiError(400, '开始日期不能晚于结束日期')
+  }
+}
+
+export function createLongTermPeriod(
+  store: AppStore,
+  input: { title?: string; detail?: string; startDate?: string; endDate?: string },
+  now = Date.now(),
+) {
+  const title = (input.title ?? '').trim()
+  const detail = (input.detail ?? '').trim()
+  const startDate = input.startDate ?? ''
+  const endDate = input.endDate ?? ''
+  if (!title) throw new ApiError(400, '请填写这个时间段的计划标题')
+  requirePeriodRange(startDate, endDate)
+  const period: LongTermPeriod = {
+    id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
+    title,
+    detail,
+    startDate,
+    endDate,
+    createdAt: now,
+  }
+  store.longTerm.periods.unshift(period)
+  return period
+}
+
+export function updateLongTermPeriod(
+  store: AppStore,
+  id: string,
+  input: { title?: string; detail?: string; startDate?: string; endDate?: string },
+) {
+  const period = store.longTerm.periods.find((item) => item.id === id)
+  if (!period) throw new ApiError(404, '时间段计划不存在')
+  const title = (input.title ?? period.title).trim()
+  const detail = input.detail === undefined ? period.detail : input.detail.trim()
+  const startDate = input.startDate ?? period.startDate
+  const endDate = input.endDate ?? period.endDate
+  if (!title) throw new ApiError(400, '请填写这个时间段的计划标题')
+  requirePeriodRange(startDate, endDate)
+  period.title = title
+  period.detail = detail
+  period.startDate = startDate
+  period.endDate = endDate
+  return period
+}
+
+export function deleteLongTermPeriod(store: AppStore, id: string) {
+  const index = store.longTerm.periods.findIndex((item) => item.id === id)
+  if (index === -1) throw new ApiError(404, '时间段计划不存在')
+  store.longTerm.periods.splice(index, 1)
 }
 
 function withLiveTimer(day: DayRecord, timer: ActiveTimer | null, now: number): DayRecord {
