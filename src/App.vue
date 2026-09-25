@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import BottomNav from './components/BottomNav.vue'
+import { setToken } from './api/client'
 import { setupAppState, teardownAppState } from './composables/useAppState'
 
 const route = useRoute()
+const router = useRouter()
 const isLogin = computed(() => route.path === '/login')
 const pageTitle = computed(() => (route.meta.title as string) ?? '时间管理')
+
+function handleLogout() {
+  setToken(null)
+  teardownAppState()
+  void router.replace('/login')
+}
 
 watch(
   isLogin,
@@ -31,7 +39,10 @@ onUnmounted(() => {
 
   <div v-else class="app-shell">
     <header class="app-header">
-      <h1 class="app-title">{{ pageTitle }}</h1>
+      <div class="app-header__inner">
+        <h1 class="app-title">{{ pageTitle }}</h1>
+        <button class="app-logout" type="button" @click="handleLogout">退出登录</button>
+      </div>
     </header>
 
     <main class="app-main">
