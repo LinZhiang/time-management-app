@@ -48,27 +48,33 @@ export function emptyStore(): AppStore {
 
 export function normalizeStore(raw: Partial<AppStore> | null | undefined): AppStore {
   const base = emptyStore()
-  if (!raw) return base
+  if (!raw || typeof raw !== 'object') return base
+  const days = raw.days && typeof raw.days === 'object' && !Array.isArray(raw.days) ? raw.days : {}
+  const plans = Array.isArray(raw.plans) ? raw.plans : []
+  const periods = Array.isArray(raw.longTerm?.periods) ? raw.longTerm.periods : []
+  const settings =
+    raw.pomodoro?.settings && typeof raw.pomodoro.settings === 'object' ? raw.pomodoro.settings : {}
   return {
     ...base,
-    ...raw,
+    authToken: typeof raw.authToken === 'string' ? raw.authToken : null,
+    days,
+    plans,
+    longTerm: {
+      overview: {
+        title: typeof raw.longTerm?.overview?.title === 'string' ? raw.longTerm.overview.title : '',
+        detail: typeof raw.longTerm?.overview?.detail === 'string' ? raw.longTerm.overview.detail : '',
+        updatedAt: typeof raw.longTerm?.overview?.updatedAt === 'number' ? raw.longTerm.overview.updatedAt : 0,
+      },
+      periods: periods.map(normalizePeriod).filter((item): item is LongTermPeriod => Boolean(item)),
+    },
+    activeTimer: raw.activeTimer ?? null,
     pomodoro: {
       phase: normalizePhase(raw.pomodoro?.phase),
       startedAt: raw.pomodoro?.startedAt ?? null,
       settings: {
         ...DEFAULT_POMODORO_SETTINGS,
-        ...raw.pomodoro?.settings,
+        ...settings,
       },
-    },
-    days: raw.days ?? {},
-    plans: raw.plans ?? [],
-    longTerm: {
-      overview: {
-        title: raw.longTerm?.overview?.title ?? '',
-        detail: raw.longTerm?.overview?.detail ?? '',
-        updatedAt: raw.longTerm?.overview?.updatedAt ?? 0,
-      },
-      periods: (raw.longTerm?.periods ?? []).map(normalizePeriod).filter((item): item is LongTermPeriod => Boolean(item)),
     },
   }
 }

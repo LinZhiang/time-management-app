@@ -10,6 +10,11 @@ export async function onRequest(context: {
   request: Request
   env?: { STORE?: KVNamespace }
 }) {
-  const runner = context.env?.STORE ? createKvRunner(context.env.STORE) : createMemoryRunner()
-  return createApp(runner).fetch(context.request)
+  try {
+    const runner = context.env?.STORE ? createKvRunner(context.env.STORE) : createMemoryRunner()
+    return await createApp(runner).fetch(context.request)
+  } catch (error) {
+    console.error(error)
+    return Response.json({ error: '服务器异常，请稍后重试' }, { status: 500 })
+  }
 }

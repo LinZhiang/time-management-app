@@ -70,9 +70,12 @@ export function createApp(withStore: StoreRunner) {
     if (!valid) throw new ApiError(401, '请先登录')
   }
 
+  app.get('/api/health', (c) => c.json({ ok: true }))
+
   app.post('/api/login', async (c) => {
     try {
-      const body = await c.req.json<{ username?: string; password?: string }>()
+      const body = await c.req.json<{ username?: string; password?: string }>().catch(() => null)
+      if (!body) return c.json({ error: '请求格式错误' }, 400)
       if (body.username !== USERNAME || body.password !== PASSWORD) {
         return c.json({ error: '账号或密码错误' }, 401)
       }
