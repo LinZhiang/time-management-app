@@ -19,16 +19,17 @@ function asStore(value: unknown): AppStore {
   return normalizeStore(value as Partial<AppStore> | undefined)
 }
 
-async function readStore(kv: KVNamespace): Promise<AppStore> {
+async function readStore(kv: KVNamespace): Promise<{ store: AppStore; readable: boolean }> {
   try {
     const stored = await kv.get(KEY, { type: 'json' })
-    return asStore(stored)
+    return { store: asStore(stored), readable: true }
   } catch {
     try {
       const stored = await kv.get(KEY)
-      return asStore(stored)
-    } catch {
-      return emptyStore()
+      return { store: asStore(stored), readable: true }
+    } catch (error) {
+      console.error('[store-kv] 读取失败，跳过写入以免清空', error)
+      return { store: emptyStore(), readable: false }
     }
   }
 }
@@ -37,8 +38,9 @@ export function createKvRunner(kv: KVNamespace): StoreRunner {
   let queue: Promise<unknown> = Promise.resolve()
   return <T>(fn: (store: AppStore) => T | Promise<T>) => {
     const run = queue.then(async () => {
-      const store = await readStore(kv)
+      const { store, readable } = await readStore(kv)
       const result = await fn(store)
+      if (!readable) return result
       const payload = JSON.stringify({
         authToken: store.authToken,
         days: store.days,

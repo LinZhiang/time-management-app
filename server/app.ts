@@ -25,7 +25,8 @@ import {
   updateLongTermPeriod,
   updatePomodoroSettings,
 } from './logic.ts'
-import type { StoreRunner } from './store-state.ts'
+import { mergeStore, type StoreRunner } from './store-state.ts'
+import { RESTORE_SEED } from './restore-seed.ts'
 
 const USERNAME = 'admin'
 const PASSWORD = 'Taihui123'
@@ -71,6 +72,34 @@ export function createApp(withStore: StoreRunner) {
   }
 
   app.get('/api/health', (c) => c.json({ ok: true }))
+
+  app.post('/api/admin/import', async (c) => {
+    try {
+      const body = await c.req.json<{ password?: string; store?: Partial<AppStore> }>().catch(() => null)
+      if (!body || body.password !== PASSWORD) {
+        return c.json({ error: '账号或密码错误' }, 401)
+      }
+      const result = await withStore((store) => {
+        const merged = mergeStore(store, body.store ?? RESTORE_SEED)
+        store.authToken = store.authToken || merged.authToken
+        store.days = merged.days
+        store.plans = merged.plans
+        store.longTerm = merged.longTerm
+        store.activeTimer = merged.activeTimer
+        store.pomodoro = merged.pomodoro
+        return {
+          dayCount: Object.keys(store.days).length,
+          planCount: store.plans.length,
+          periodCount: store.longTerm.periods.length,
+          dates: Object.keys(store.days).sort(),
+        }
+      })
+      return c.json({ ok: true, ...result })
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
 
   app.post('/api/login', async (c) => {
     try {

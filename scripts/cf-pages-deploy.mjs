@@ -26,7 +26,7 @@ function wranglerToken() {
   }
 }
 
-function pagesConfig(kvId) {
+function pagesConfig() {
   return `name = "taihui-time"
 compatibility_date = "2025-09-21"
 pages_build_output_dir = "./dist"
@@ -34,10 +34,6 @@ pages_build_output_dir = "./dist"
 [[services]]
 binding = "API"
 service = "time-management-app"
-
-[[kv_namespaces]]
-binding = "STORE"
-id = "${kvId}"
 `
 }
 
@@ -104,10 +100,6 @@ async function bindPages(kvId, token) {
     deployment_configs: {
       preview: {
         ...(configs.preview || {}),
-        kv_namespaces: {
-          ...(configs.preview?.kv_namespaces || {}),
-          STORE: { namespace_id: kvId },
-        },
         service_bindings: {
           ...(configs.preview?.service_bindings || {}),
           API: { service: 'time-management-app' },
@@ -115,10 +107,6 @@ async function bindPages(kvId, token) {
       },
       production: {
         ...(configs.production || {}),
-        kv_namespaces: {
-          ...(configs.production?.kv_namespaces || {}),
-          STORE: { namespace_id: kvId },
-        },
         service_bindings: {
           ...(configs.production?.service_bindings || {}),
           API: { service: 'time-management-app' },
@@ -143,9 +131,9 @@ async function bindPages(kvId, token) {
   }
 }
 
-function deployPages(kvId) {
+function deployPages() {
   const original = readFileSync(wranglerPath, 'utf8')
-  writeFileSync(wranglerPath, pagesConfig(kvId))
+  writeFileSync(wranglerPath, pagesConfig())
   try {
     const result = spawnSync(
       'npx',
@@ -164,7 +152,7 @@ try {
   ensureDist()
   const kvId = ensureKvId()
   await bindPages(kvId, wranglerToken())
-  deployPages(kvId)
+  deployPages()
   console.log(`Pages 已部署：https://${projectName}.pages.dev`)
 } catch (error) {
   console.error(error instanceof Error ? error.message : error)
