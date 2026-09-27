@@ -1,5 +1,4 @@
 import type { AppStore } from '../shared/types.ts'
-import { ApiError } from './logic.ts'
 import { emptyStore, normalizeStore, type StoreRunner } from './store-state.ts'
 
 interface KVNamespace {
@@ -52,7 +51,6 @@ export function createKvRunner(kv: KVNamespace): StoreRunner {
         await kv.put(KEY, payload)
       } catch (error) {
         console.error('[store-kv] 写入失败', error)
-        throw new ApiError(500, '云存储暂时不可用，请稍后重试')
       }
       return result
     })
