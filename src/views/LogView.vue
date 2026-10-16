@@ -2,12 +2,14 @@
 import { onActivated, ref } from 'vue'
 import { fetchLogs } from '../api/client'
 import { dateKey, formatDateLabel, formatDurationText, monthStart } from '../../shared/date.ts'
-import type { DayRecord } from '../../shared/types.ts'
+import type { CustomTimeModule, DayRecord, HiddenTimeCategory } from '../../shared/types.ts'
 
 const today = dateKey()
 const from = ref(monthStart(today))
 const to = ref(today)
 const days = ref<DayRecord[]>([])
+const customModules = ref<CustomTimeModule[]>([])
+const hiddenCategories = ref<HiddenTimeCategory[]>([])
 const loading = ref(false)
 const error = ref('')
 const expanded = ref<string[]>([])
@@ -18,6 +20,8 @@ async function load() {
   try {
     const result = await fetchLogs(from.value, to.value)
     days.value = result.days
+    customModules.value = result.customModules ?? []
+    hiddenCategories.value = result.hiddenCategories ?? []
   } catch (err) {
     error.value = err instanceof Error ? err.message : '日志加载失败'
   } finally {
@@ -34,6 +38,31 @@ function toggle(date: string) {
   expanded.value = expanded.value.includes(date)
     ? expanded.value.filter((item) => item !== date)
     : [...expanded.value, date]
+}
+
+function dayRows(day: DayRecord) {
+  const hidden = new Set(hiddenCategories.value)
+  const rows: { label: string; value: string }[] = []
+  const push = (id: string, label: string, value: string) => {
+    if (hidden.has(id as HiddenTimeCategory)) return
+    rows.push({ label, value })
+  }
+  push('work', '工作时间', formatDurationText(day.workMs))
+  push('commute', '交通出行时间', formatDurationText(day.commuteMs))
+  push('study', '学习时间', formatDurationText(day.studyMs))
+  push('housework', '做饭家务时间', formatDurationText(day.houseworkMs))
+  push('social', '应酬出行时间', formatDurationText(day.socialMs))
+  for (const module of customModules.value) {
+    rows.push({
+      label: module.title,
+      value: formatDurationText(day.customMs?.[module.id] || 0),
+    })
+  }
+  push('other', '其他时间', formatDurationText(day.otherMs))
+  rows.push({ label: '锻炼时间', value: formatDurationText(day.exerciseMs) })
+  rows.push({ label: '锻炼大卡量', value: `${day.exerciseCalories} 大卡` })
+  rows.push({ label: '番茄量', value: `${day.pomodoroCount} 轮` })
+  return rows
 }
 </script>
 
@@ -70,15 +99,10 @@ function toggle(date: string) {
       </button>
       <div v-if="expanded.includes(day.date)" class="day-card__body">
         <ul>
-          <li><span>工作时间</span><strong>{{ formatDurationText(day.workMs) }}</strong></li>
-          <li><span>交通出行时间</span><strong>{{ formatDurationText(day.commuteMs) }}</strong></li>
-          <li><span>学习时间</span><strong>{{ formatDurationText(day.studyMs) }}</strong></li>
-          <li><span>做饭家务时间</span><strong>{{ formatDurationText(day.houseworkMs) }}</strong></li>
-          <li><span>应酬出行时间</span><strong>{{ formatDurationText(day.socialMs) }}</strong></li>
-          <li><span>其他时间</span><strong>{{ formatDurationText(day.otherMs) }}</strong></li>
-          <li><span>锻炼时间</span><strong>{{ formatDurationText(day.exerciseMs) }}</strong></li>
-          <li><span>锻炼大卡量</span><strong>{{ day.exerciseCalories }} 大卡</strong></li>
-          <li><span>番茄量</span><strong>{{ day.pomodoroCount }} 轮</strong></li>
+          <li v-for="row in dayRows(day)" :key="row.label">
+            <span>{{ row.label }}</span>
+            <strong>{{ row.value }}</strong>
+          </li>
         </ul>
         <div v-if="day.otherDetails.length" class="other-block">
           <h3>其他时间明细</h3>

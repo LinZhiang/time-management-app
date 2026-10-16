@@ -1,12 +1,14 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { dateKey, monthEnd, monthStart } from '../shared/date.ts'
-import type { AppStore, PomodoroSettings, TimeCategory } from '../shared/types.ts'
+import { dateKey, isValidDateKey, monthEnd, monthStart } from '../shared/date.ts'
+import type { AppStore, PomodoroSettings } from '../shared/types.ts'
 import {
   ApiError,
+  createCustomModule,
   createLongTermPeriod,
   createPlan,
   deleteLongTermPeriod,
+  deleteTimeModule,
   enterPomodoroBuffer,
   enterPomodoroRest,
   exitPomodoro,
@@ -143,10 +145,10 @@ export function createApp(withStore: StoreRunner) {
   app.post('/api/timer/start', async (c) => {
     try {
       await requireAuth(c)
-      const body = await c.req.json<{ category?: TimeCategory; otherNote?: string }>()
+      const body = await c.req.json<{ category?: string; otherNote?: string }>()
       if (!body.category) return c.json({ error: '缺少时间类型' }, 400)
       const state = await withStore((store) => {
-        startTimer(store, body.category as TimeCategory, body.otherNote)
+        startTimer(store, body.category as string, body.otherNote)
         return liveState(store)
       })
       return c.json(state)
@@ -273,14 +275,30 @@ export function createApp(withStore: StoreRunner) {
   app.get('/api/stats', async (c) => {
     try {
       await requireAuth(c)
-      const scope = c.req.query('scope') === 'month' ? 'month' : 'today'
+      const scopeQuery = c.req.query('scope')
       const today = dateKey()
-      const from = scope === 'month' ? monthStart(today) : today
-      const to = scope === 'month' ? monthEnd(today) : today
+      let scope: 'today' | 'month' | 'range' = 'today'
+      let from = today
+      let to = today
+      if (scopeQuery === 'month') {
+        scope = 'month'
+        from = monthStart(today)
+        to = monthEnd(today)
+      } else if (scopeQuery === 'range') {
+        scope = 'range'
+        from = c.req.query('from') || monthStart(today)
+        to = c.req.query('to') || today
+        if (!isValidDateKey(from) || !isValidDateKey(to)) {
+          return c.json({ error: '请选择有效的开始和结束日期' }, 400)
+        }
+        if (from > to) return c.json({ error: '开始日期不能晚于结束日期' }, 400)
+      }
       const result = await withStore((store) => ({
         scope,
         from,
         to,
+        customModules: store.customModules,
+        hiddenCategories: store.hiddenCategories,
         ...sumRange(store, from, to),
       }))
       return c.json(result)
@@ -296,8 +314,43 @@ export function createApp(withStore: StoreRunner) {
       const today = dateKey()
       const from = c.req.query('from') || monthStart(today)
       const to = c.req.query('to') || today
-      const days = await withStore((store) => listLogs(store, from, to))
-      return c.json({ from, to, days })
+      const result = await withStore((store) => ({
+        from,
+        to,
+        days: listLogs(store, from, to),
+        customModules: store.customModules,
+        hiddenCategories: store.hiddenCategories,
+      }))
+      return c.json(result)
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.post('/api/time-modules', async (c) => {
+    try {
+      await requireAuth(c)
+      const body = await c.req.json<{ title?: string }>().catch(() => null)
+      const state = await withStore((store) => {
+        createCustomModule(store, body?.title ?? '')
+        return liveState(store)
+      })
+      return c.json(state)
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.post('/api/time-modules/:id/delete', async (c) => {
+    try {
+      await requireAuth(c)
+      const state = await withStore((store) => {
+        deleteTimeModule(store, c.req.param('id'))
+        return liveState(store)
+      })
+      return c.json(state)
     } catch (error) {
       const { status, body } = jsonError(error)
       return c.json(body, status)

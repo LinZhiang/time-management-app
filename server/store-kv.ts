@@ -48,6 +48,8 @@ export function createKvRunner(kv: KVNamespace): StoreRunner {
         longTerm: store.longTerm,
         activeTimer: store.activeTimer,
         pomodoro: store.pomodoro,
+        customModules: store.customModules,
+        hiddenCategories: store.hiddenCategories,
       })
       try {
         await kv.put(KEY, payload)

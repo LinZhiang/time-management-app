@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed, onActivated, ref, watch } from 'vue'
 import { fetchLongTerm, fetchStats } from '../api/client'
-import { formatDateRangeLabel, formatDuration, formatDurationText } from '../../shared/date.ts'
-import type { DayRecord, LongTermOverview, LongTermPeriod } from '../../shared/types.ts'
+import { dateKey, formatDateRangeLabel, formatDuration, formatDurationText, monthStart } from '../../shared/date.ts'
+import type {
+  CustomTimeModule,
+  DayRecord,
+  HiddenTimeCategory,
+  LongTermOverview,
+  LongTermPeriod,
+} from '../../shared/types.ts'
 
-const scope = ref<'today' | 'month'>('today')
+const scope = ref<'today' | 'month' | 'range'>('today')
 const loading = ref(false)
 const error = ref('')
 const total = ref<DayRecord | null>(null)
@@ -14,6 +20,12 @@ const to = ref('')
 const overview = ref<LongTermOverview>({ title: '', detail: '', updatedAt: 0 })
 const currentPeriods = ref<LongTermPeriod[]>([])
 const overviewOpen = ref(false)
+const customModules = ref<CustomTimeModule[]>([])
+const hiddenCategories = ref<HiddenTimeCategory[]>([])
+const showRangeModal = ref(false)
+const rangeFrom = ref(monthStart(dateKey()))
+const rangeTo = ref(dateKey())
+const rangeError = ref('')
 
 const otherDays = computed(() => days.value.filter((day) => day.otherMs > 0 && day.otherDetails.length > 0))
 const hasOverview = computed(() => Boolean(overview.value.title || overview.value.detail))
@@ -22,11 +34,14 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [result, longTerm] = await Promise.all([fetchStats(scope.value), fetchLongTerm()])
+    const range = scope.value === 'range' ? { from: from.value, to: to.value } : undefined
+    const [result, longTerm] = await Promise.all([fetchStats(scope.value, range), fetchLongTerm()])
     total.value = result.total
     days.value = result.days
     from.value = result.from
     to.value = result.to
+    customModules.value = result.customModules ?? []
+    hiddenCategories.value = result.hiddenCategories ?? []
     overview.value = longTerm.overview
     currentPeriods.value = longTerm.currentPeriods
   } catch (err) {
@@ -36,7 +51,8 @@ async function load() {
   }
 }
 
-watch(scope, () => {
+watch(scope, (next, previous) => {
+  if (next === 'range' && previous !== 'range') return
   void load()
 })
 
@@ -48,17 +64,59 @@ void load()
 const items = computed(() => {
   const data = total.value
   if (!data) return []
-  return [
-    { label: '工作时间', value: formatDurationText(data.workMs), raw: data.workMs },
-    { label: '交通出行时间', value: formatDurationText(data.commuteMs), raw: data.commuteMs },
-    { label: '学习时间', value: formatDurationText(data.studyMs), raw: data.studyMs },
-    { label: '锻炼时间', value: formatDurationText(data.exerciseMs), raw: data.exerciseMs },
-    { label: '锻炼大卡量', value: `${data.exerciseCalories} 大卡`, raw: data.exerciseCalories },
-    { label: '做饭家务时间', value: formatDurationText(data.houseworkMs), raw: data.houseworkMs },
-    { label: '应酬出行时间', value: formatDurationText(data.socialMs), raw: data.socialMs },
-    { label: '其他时间', value: formatDurationText(data.otherMs), raw: data.otherMs },
-  ]
+  const hidden = new Set(hiddenCategories.value)
+  const rows: { label: string; value: string; raw: number }[] = []
+  const push = (id: string, label: string, raw: number, text = formatDurationText(raw)) => {
+    if (hidden.has(id as HiddenTimeCategory)) return
+    rows.push({ label, value: text, raw })
+  }
+  push('work', '工作时间', data.workMs)
+  push('commute', '交通出行时间', data.commuteMs)
+  push('study', '学习时间', data.studyMs)
+  rows.push({ label: '锻炼时间', value: formatDurationText(data.exerciseMs), raw: data.exerciseMs })
+  rows.push({
+    label: '锻炼大卡量',
+    value: `${data.exerciseCalories} 大卡`,
+    raw: data.exerciseCalories,
+  })
+  push('housework', '做饭家务时间', data.houseworkMs)
+  push('social', '应酬出行时间', data.socialMs)
+  for (const module of customModules.value) {
+    const ms = data.customMs?.[module.id] || 0
+    rows.push({ label: module.title, value: formatDurationText(ms), raw: ms })
+  }
+  push('other', '其他时间', data.otherMs)
+  return rows
 })
+
+const rangeHint = computed(() => {
+  if (scope.value === 'today') return '统计当天已记录时间'
+  if (from.value && to.value) return `${from.value} 至 ${to.value}`
+  return '请选择时间范围'
+})
+
+function openRangeModal() {
+  rangeFrom.value = from.value || monthStart(dateKey())
+  rangeTo.value = to.value || dateKey()
+  rangeError.value = ''
+  showRangeModal.value = true
+}
+
+function confirmRange() {
+  if (!rangeFrom.value || !rangeTo.value) {
+    rangeError.value = '请选择开始和结束日期'
+    return
+  }
+  if (rangeFrom.value > rangeTo.value) {
+    rangeError.value = '开始日期不能晚于结束日期'
+    return
+  }
+  from.value = rangeFrom.value
+  to.value = rangeTo.value
+  scope.value = 'range'
+  showRangeModal.value = false
+  void load()
+}
 </script>
 
 <template>
@@ -70,10 +128,13 @@ const items = computed(() => {
       <button class="chip" :class="{ 'chip--active': scope === 'month' }" type="button" @click="scope = 'month'">
         一个月
       </button>
+      <button class="chip" :class="{ 'chip--active': scope === 'range' }" type="button" @click="openRangeModal">
+        时间范围
+      </button>
     </div>
 
     <p v-if="error" class="form-error">{{ error }}</p>
-    <p v-else class="range-hint">{{ scope === 'today' ? '统计当天已记录时间' : `${from} 至 ${to}` }}</p>
+    <p v-else class="range-hint">{{ rangeHint }}</p>
 
     <section class="card stats-list">
       <div v-for="item in items" :key="item.label" class="stats-item">
@@ -111,7 +172,7 @@ const items = computed(() => {
 
     <section v-if="total && total.otherMs > 0" class="card other-card">
       <h3 class="other-card__title">其他时间明细</h3>
-      <p class="other-card__desc">当天有其他时间时，会按具体内容动态展示。</p>
+      <p class="other-card__desc">含手动填写的其他时间，以及已删除模块归入这里的时间。</p>
       <div v-if="scope === 'today'">
         <ul v-if="total.otherDetails.length" class="other-list">
           <li v-for="item in total.otherDetails" :key="item.note">
@@ -131,9 +192,35 @@ const items = computed(() => {
             </li>
           </ul>
         </article>
-        <p v-if="otherDays.length === 0" class="empty-hint">本月暂无其他时间明细。</p>
+        <p v-if="otherDays.length === 0" class="empty-hint">这个范围内暂无其他时间明细。</p>
       </div>
     </section>
+
+    <Teleport to="body">
+      <div v-if="showRangeModal" class="modal-mask" @click.self="showRangeModal = false">
+        <div class="modal-panel card">
+          <h3 class="modal-panel__title">选择时间范围</h3>
+          <p class="modal-panel__hint">确定后会统计这段日期内的全部记录。</p>
+          <div class="range-fields">
+            <label class="field">
+              <span class="field__label">开始日期</span>
+              <input v-model="rangeFrom" class="field__input" type="date" />
+            </label>
+            <label class="field">
+              <span class="field__label">结束日期</span>
+              <input v-model="rangeTo" class="field__input" type="date" />
+            </label>
+          </div>
+          <p v-if="rangeError" class="form-error">{{ rangeError }}</p>
+          <button class="btn btn--primary btn--large range-submit" type="button" :disabled="loading" @click="confirmRange">
+            确定
+          </button>
+          <button class="btn btn--ghost btn--small range-cancel" type="button" @click="showRangeModal = false">
+            取消
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -146,7 +233,24 @@ const items = computed(() => {
 
 .scope-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.range-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.range-submit {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.range-cancel {
+  width: 100%;
+  margin-top: 8px;
 }
 
 .range-hint {

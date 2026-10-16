@@ -10,9 +10,11 @@ import {
   startTimer,
   stopExercise,
   stopTimer,
+  createTimeModule,
+  deleteTimeModule,
 } from '../api/client'
 import { dateKey } from '../../shared/date.ts'
-import type { LiveState, PomodoroPhase, PomodoroSettings, TimeCategory } from '../../shared/types.ts'
+import type { LiveState, PomodoroPhase, PomodoroSettings } from '../../shared/types.ts'
 import {
   playExerciseStartSound,
   playRestStartSound,
@@ -112,7 +114,7 @@ export function useAppState() {
     return Math.max(0, now.value - syncedAt)
   }
 
-  function categoryDisplayMs(category: TimeCategory) {
+  function categoryDisplayMs(category: string) {
     const day = today.value
     if (!day) return 0
     const base =
@@ -126,11 +128,13 @@ export function useAppState() {
               ? day.houseworkMs
               : category === 'social'
                 ? day.socialMs
-                : day.otherMs
+                : category === 'other'
+                  ? day.otherMs
+                  : day.customMs?.[category] || 0
     return activeTimer.value?.category === category ? base + extraElapsed() : base
   }
 
-  async function handleStartTimer(category: TimeCategory, otherNote?: string) {
+  async function handleStartTimer(category: string, otherNote?: string) {
     unlockAudio()
     playStartSound()
     applyState(await run(() => startTimer(category, otherNote)))
@@ -177,6 +181,14 @@ export function useAppState() {
     return result
   }
 
+  async function handleCreateTimeModule(title: string) {
+    applyState(await run(() => createTimeModule(title)))
+  }
+
+  async function handleDeleteTimeModule(id: string) {
+    applyState(await run(() => deleteTimeModule(id)))
+  }
+
   return {
     state,
     now,
@@ -186,6 +198,8 @@ export function useAppState() {
     todayKey,
     activeTimer,
     pomodoro,
+    customModules: computed(() => state.value?.customModules ?? []),
+    hiddenCategories: computed(() => state.value?.hiddenCategories ?? []),
     categoryDisplayMs,
     refreshState,
     handleStartTimer,
@@ -197,5 +211,7 @@ export function useAppState() {
     handleExitPomodoro,
     handleStartExercise,
     handleStopExercise,
+    handleCreateTimeModule,
+    handleDeleteTimeModule,
   }
 }

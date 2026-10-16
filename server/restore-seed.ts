@@ -1,6 +1,6 @@
 import type { AppStore } from '../shared/types.ts'
 
-export const RESTORE_SEED: AppStore = {
+export const RESTORE_SEED = {
   "authToken": null,
   "days": {
     "2026-09-28": {
@@ -201,4 +201,4 @@ export const RESTORE_SEED: AppStore = {
       "restMinutes": 10
     }
   }
-}
+} as unknown as Partial<AppStore>

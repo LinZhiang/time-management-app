@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ApiError, login, setToken } from '../api/client'
-import { usePwaInstall } from '../utils/pwaInstall'
+import { IPAD_INSTALL_STEPS, usePwaInstall } from '../utils/pwaInstall'
 
 const router = useRouter()
 const username = ref('admin')
@@ -10,6 +10,7 @@ const password = ref('')
 const submitting = ref(false)
 const loginError = ref('')
 const installLoading = ref(false)
+const showIpadGuide = ref(false)
 
 const {
   canPromptInstall,
@@ -22,6 +23,7 @@ const {
 } = usePwaInstall()
 
 refreshInstalledState()
+showIpadGuide.value = browserInstallInfo.isIos
 
 async function handleLogin() {
   loginError.value = ''
@@ -78,8 +80,10 @@ async function handleInstall() {
     </section>
 
     <section class="card install-card">
-      <h2 class="install-card__title">安装到手机</h2>
-      <p class="install-card__desc">安装到主屏幕后，可像 App 一样全屏使用，登录状态会保留在本机。</p>
+      <h2 class="install-card__title">安装到设备</h2>
+      <p class="install-card__desc">
+        安卓手机可一键安装 PWA；苹果 iPad 需要用 Safari 添加到主屏幕，点下方对应按钮即可。
+      </p>
 
       <div
         class="install-status"
@@ -106,6 +110,8 @@ async function handleInstall() {
         <p class="install-status__text">{{ installStatusHint }}</p>
       </div>
 
+      <h3 class="install-card__subtitle">安卓手机</h3>
+
       <button
         v-if="installUiStatus === 'ready'"
         class="btn btn--primary btn--large"
@@ -113,16 +119,27 @@ async function handleInstall() {
         :disabled="installLoading"
         @click="handleInstall"
       >
-        {{ installLoading ? '处理中…' : '安装到手机' }}
+        {{ installLoading ? '处理中…' : '安装到安卓手机' }}
       </button>
 
-      <ol v-if="installUiStatus === 'manual'" class="install-steps">
+      <ol v-if="installUiStatus === 'manual' && !browserInstallInfo.isIos" class="install-steps">
         <li v-for="(step, index) in manualInstallSteps" :key="index">{{ step }}</li>
       </ol>
 
       <p v-if="installUiStatus === 'manual' && browserInstallInfo.isHuaweiBrowser" class="install-tip">
         若菜单里没有「添加到主屏幕」，请用 <strong>Chrome 浏览器</strong> 打开本页后再试。
       </p>
+
+      <h3 class="install-card__subtitle">苹果 iPad</h3>
+      <p class="install-card__desc install-card__desc--tight">
+        iPad 不支持安卓那种一键安装，必须用 Safari 把网页加到主屏幕。
+      </p>
+      <button class="btn btn--primary btn--large" type="button" @click="showIpadGuide = !showIpadGuide">
+        {{ showIpadGuide ? '收起 iPad 安装步骤' : '安装到 iPad' }}
+      </button>
+      <ol v-if="showIpadGuide" class="install-steps">
+        <li v-for="(step, index) in IPAD_INSTALL_STEPS" :key="index">{{ step }}</li>
+      </ol>
     </section>
   </div>
 </template>
@@ -186,11 +203,21 @@ async function handleInstall() {
   font-size: 16px;
 }
 
+.install-card__subtitle {
+  margin: 18px 0 8px;
+  font-size: 14px;
+  color: var(--color-primary);
+}
+
 .install-card__desc {
   margin: 0 0 16px;
   font-size: 13px;
   line-height: 1.6;
   color: var(--color-text-secondary);
+}
+
+.install-card__desc--tight {
+  margin-bottom: 10px;
 }
 
 .install-status {
@@ -229,7 +256,7 @@ async function handleInstall() {
 }
 
 .install-steps {
-  margin: 0;
+  margin: 12px 0 0;
   padding-left: 20px;
   font-size: 14px;
   line-height: 1.8;

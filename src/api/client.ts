@@ -1,11 +1,12 @@
 import type {
+  CustomTimeModule,
   DayRecord,
+  HiddenTimeCategory,
   LiveState,
   LongTermOverview,
   LongTermPeriod,
   Plan,
   PomodoroSettings,
-  TimeCategory,
 } from '../../shared/types.ts'
 
 export interface LongTermPayload {
@@ -69,10 +70,24 @@ export function fetchState() {
   return request<LiveState>('/api/state')
 }
 
-export function startTimer(category: TimeCategory, otherNote?: string) {
+export function startTimer(category: string, otherNote?: string) {
   return request<LiveState>('/api/timer/start', {
     method: 'POST',
     body: JSON.stringify({ category, otherNote }),
+  })
+}
+
+export function createTimeModule(title: string) {
+  return request<LiveState>('/api/time-modules', {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  })
+}
+
+export function deleteTimeModule(id: string) {
+  return request<LiveState>(`/api/time-modules/${id}/delete`, {
+    method: 'POST',
+    body: '{}',
   })
 }
 
@@ -117,20 +132,31 @@ export function stopExercise(calories?: number) {
   )
 }
 
-export function fetchStats(scope: 'today' | 'month') {
+export function fetchStats(scope: 'today' | 'month' | 'range', range?: { from: string; to: string }) {
+  const params = new URLSearchParams({ scope })
+  if (scope === 'range' && range) {
+    params.set('from', range.from)
+    params.set('to', range.to)
+  }
   return request<{
     scope: string
     from: string
     to: string
     total: DayRecord
     days: DayRecord[]
-  }>(`/api/stats?scope=${scope}`)
+    customModules: CustomTimeModule[]
+    hiddenCategories: HiddenTimeCategory[]
+  }>(`/api/stats?${params.toString()}`)
 }
 
 export function fetchLogs(from: string, to: string) {
-  return request<{ from: string; to: string; days: DayRecord[] }>(
-    `/api/logs?from=${from}&to=${to}`,
-  )
+  return request<{
+    from: string
+    to: string
+    days: DayRecord[]
+    customModules: CustomTimeModule[]
+    hiddenCategories: HiddenTimeCategory[]
+  }>(`/api/logs?from=${from}&to=${to}`)
 }
 
 export function fetchPlans(from: string, to: string) {

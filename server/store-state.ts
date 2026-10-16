@@ -1,8 +1,11 @@
 import { cloneDay, emptyDay } from '../shared/record.ts'
+import { isHiddenTimeCategory } from '../shared/time-modules.ts'
 import {
   DEFAULT_POMODORO_SETTINGS,
   type AppStore,
+  type CustomTimeModule,
   type DayRecord,
+  type HiddenTimeCategory,
   type LongTermPeriod,
   type LongTermPlan,
   type Plan,
@@ -34,6 +37,61 @@ function normalizePeriod(raw: Partial<LongTermPeriod> | null | undefined): LongT
   }
 }
 
+function normalizeCustomMs(raw: DayRecord['customMs'] | undefined): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const customMs: Record<string, number> = {}
+  for (const [id, ms] of Object.entries(raw)) {
+    const value = Number(ms)
+    if (id && value > 0) customMs[id] = value
+  }
+  return customMs
+}
+
+function asDay(raw?: DayRecord): DayRecord | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const date = typeof raw.date === 'string' ? raw.date : ''
+  const base = emptyDay(date)
+  return cloneDay({
+    ...base,
+    ...raw,
+    date: date || base.date,
+    workMs: Number(raw.workMs) || 0,
+    commuteMs: Number(raw.commuteMs) || 0,
+    studyMs: Number(raw.studyMs) || 0,
+    houseworkMs: Number(raw.houseworkMs) || 0,
+    socialMs: Number(raw.socialMs) || 0,
+    otherMs: Number(raw.otherMs) || 0,
+    otherDetails: Array.isArray(raw.otherDetails) ? raw.otherDetails : [],
+    customMs: normalizeCustomMs(raw.customMs),
+    exerciseMs: Number(raw.exerciseMs) || 0,
+    exerciseCalories: Number(raw.exerciseCalories) || 0,
+    pomodoroRounds: Array.isArray(raw.pomodoroRounds) ? raw.pomodoroRounds : [],
+    pomodoroCount: Number(raw.pomodoroCount) || 0,
+    hasActivity: Boolean(raw.hasActivity),
+  })
+}
+
+function normalizeCustomModules(raw: AppStore['customModules'] | undefined): CustomTimeModule[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const modules: CustomTimeModule[] = []
+  for (const item of raw) {
+    if (!item?.id || !item.title || seen.has(item.id)) continue
+    seen.add(item.id)
+    modules.push({
+      id: item.id,
+      title: String(item.title).trim(),
+      createdAt: Number(item.createdAt) || 0,
+    })
+  }
+  return modules.sort((a, b) => a.createdAt - b.createdAt)
+}
+
+function normalizeHiddenCategories(raw: AppStore['hiddenCategories'] | undefined): HiddenTimeCategory[] {
+  if (!Array.isArray(raw)) return []
+  return [...new Set(raw.filter(isHiddenTimeCategory))]
+}
+
 export function emptyStore(): AppStore {
   return {
     authToken: null,
@@ -46,13 +104,20 @@ export function emptyStore(): AppStore {
       startedAt: null,
       settings: { ...DEFAULT_POMODORO_SETTINGS },
     },
+    customModules: [],
+    hiddenCategories: [],
   }
 }
 
 export function normalizeStore(raw: Partial<AppStore> | null | undefined): AppStore {
   const base = emptyStore()
   if (!raw || typeof raw !== 'object') return base
-  const days = raw.days && typeof raw.days === 'object' && !Array.isArray(raw.days) ? raw.days : {}
+  const rawDays = raw.days && typeof raw.days === 'object' && !Array.isArray(raw.days) ? raw.days : {}
+  const days: Record<string, DayRecord> = {}
+  for (const [key, value] of Object.entries(rawDays)) {
+    const day = asDay(value as DayRecord)
+    if (day) days[key] = day
+  }
   const plans = Array.isArray(raw.plans) ? raw.plans : []
   const periods = Array.isArray(raw.longTerm?.periods) ? raw.longTerm.periods : []
   const settings =
@@ -79,6 +144,8 @@ export function normalizeStore(raw: Partial<AppStore> | null | undefined): AppSt
         ...settings,
       },
     },
+    customModules: normalizeCustomModules(raw.customModules),
+    hiddenCategories: normalizeHiddenCategories(raw.hiddenCategories),
   }
 }
 
@@ -88,32 +155,10 @@ export function storeHasUserData(store: AppStore): boolean {
   return (
     Object.keys(store.days).length > 0 ||
     store.plans.length > 0 ||
+    store.customModules.length > 0 ||
     store.longTerm.periods.length > 0 ||
     Boolean(store.longTerm.overview.title || store.longTerm.overview.detail)
   )
-}
-
-function asDay(raw?: DayRecord): DayRecord | undefined {
-  if (!raw || typeof raw !== 'object') return undefined
-  const date = typeof raw.date === 'string' ? raw.date : ''
-  const base = emptyDay(date)
-  return cloneDay({
-    ...base,
-    ...raw,
-    date: date || base.date,
-    workMs: Number(raw.workMs) || 0,
-    commuteMs: Number(raw.commuteMs) || 0,
-    studyMs: Number(raw.studyMs) || 0,
-    houseworkMs: Number(raw.houseworkMs) || 0,
-    socialMs: Number(raw.socialMs) || 0,
-    otherMs: Number(raw.otherMs) || 0,
-    otherDetails: Array.isArray(raw.otherDetails) ? raw.otherDetails : [],
-    exerciseMs: Number(raw.exerciseMs) || 0,
-    exerciseCalories: Number(raw.exerciseCalories) || 0,
-    pomodoroRounds: Array.isArray(raw.pomodoroRounds) ? raw.pomodoroRounds : [],
-    pomodoroCount: Number(raw.pomodoroCount) || 0,
-    hasActivity: Boolean(raw.hasActivity),
-  })
 }
 
 function mergeDay(left?: DayRecord, right?: DayRecord): DayRecord | undefined {
@@ -131,6 +176,10 @@ function mergeDay(left?: DayRecord, right?: DayRecord): DayRecord | undefined {
   for (const item of second.pomodoroRounds) {
     if (!rounds.some((row) => row.completedAt === item.completedAt)) rounds.push(item)
   }
+  const customMs: Record<string, number> = { ...first.customMs }
+  for (const [id, ms] of Object.entries(second.customMs)) {
+    customMs[id] = Math.max(customMs[id] || 0, ms)
+  }
   return {
     date: first.date || second.date,
     workMs: Math.max(first.workMs, second.workMs),
@@ -140,6 +189,7 @@ function mergeDay(left?: DayRecord, right?: DayRecord): DayRecord | undefined {
     socialMs: Math.max(first.socialMs, second.socialMs),
     otherMs: Math.max(first.otherMs, second.otherMs),
     otherDetails,
+    customMs,
     exerciseMs: Math.max(first.exerciseMs, second.exerciseMs),
     exerciseCalories: Math.max(first.exerciseCalories, second.exerciseCalories),
     pomodoroRounds: rounds.sort((a, b) => a.completedAt - b.completedAt),
@@ -183,5 +233,7 @@ export function mergeStore(
     },
     activeTimer: left.activeTimer || right.activeTimer,
     pomodoro: left.pomodoro.startedAt ? left.pomodoro : right.pomodoro.startedAt ? right.pomodoro : left.pomodoro,
+    customModules: normalizeCustomModules([...left.customModules, ...right.customModules]),
+    hiddenCategories: normalizeHiddenCategories([...left.hiddenCategories, ...right.hiddenCategories]),
   }
 }

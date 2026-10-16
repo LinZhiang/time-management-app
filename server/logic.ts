@@ -1,5 +1,10 @@
 import { dateKey, isValidDateKey, nextDayKey, startOfDay } from '../shared/date.ts'
-import { addCategoryTime, cloneDay, emptyDay, ensureDay } from '../shared/record.ts'
+import { addCategoryTime, addOtherDetail, cloneDay, emptyDay, ensureDay } from '../shared/record.ts'
+import {
+  isHiddenTimeCategory,
+  isTimeCategory,
+  isUndeletableTimeModule,
+} from '../shared/time-modules.ts'
 import {
   EXERCISE_MIN_MS,
   POMODORO_BUFFER_MS,
@@ -13,8 +18,10 @@ import {
   type LongTermPeriod,
   type Plan,
   type PomodoroSettings,
+  CATEGORY_LABELS,
+  type CustomTimeModule,
   type TimeCategory,
-  type TimerCategory,
+  type TrackedCategory,
 } from '../shared/types.ts'
 
 export class ApiError extends Error {
@@ -115,10 +122,46 @@ function syncPomodoro(store: AppStore, now: number) {
   }
 }
 
-function requireNote(category: TimerCategory, otherNote?: string) {
+function requireNote(category: TrackedCategory, otherNote?: string) {
   if (category !== 'other') return
   if (!otherNote?.trim()) {
     throw new ApiError(400, '请填写其他时间的具体内容')
+  }
+}
+
+function isAllowedTimerCategory(store: AppStore, category: string) {
+  if (category === 'exercise') return false
+  if (isTimeCategory(category)) {
+    return !isHiddenTimeCategory(category) || !store.hiddenCategories.includes(category)
+  }
+  return store.customModules.some((item) => item.id === category)
+}
+
+function builtinMs(day: DayRecord, category: TimeCategory) {
+  if (category === 'work') return day.workMs
+  if (category === 'commute') return day.commuteMs
+  if (category === 'study') return day.studyMs
+  if (category === 'housework') return day.houseworkMs
+  if (category === 'social') return day.socialMs
+  return day.otherMs
+}
+
+function clearBuiltinMs(day: DayRecord, category: TimeCategory) {
+  if (category === 'commute') day.commuteMs = 0
+  else if (category === 'housework') day.houseworkMs = 0
+  else if (category === 'social') day.socialMs = 0
+}
+
+function foldCategoryIntoOther(store: AppStore, category: string, label: string) {
+  for (const day of Object.values(store.days)) {
+    if (!day.customMs) day.customMs = {}
+    if (isTimeCategory(category)) {
+      addOtherDetail(day, label, builtinMs(day, category))
+      clearBuiltinMs(day, category)
+    } else {
+      addOtherDetail(day, label, day.customMs[category] || 0)
+      delete day.customMs[category]
+    }
   }
 }
 
@@ -130,12 +173,15 @@ export function syncStore(store: AppStore, now = Date.now()) {
 
 export function startTimer(
   store: AppStore,
-  category: TimeCategory,
+  category: string,
   otherNote: string | undefined,
   now = Date.now(),
 ) {
   if (store.activeTimer?.category === 'exercise') {
     throw new ApiError(400, '请先在运动管理中停止运动')
+  }
+  if (!isAllowedTimerCategory(store, category)) {
+    throw new ApiError(400, '该时间模块不存在或已删除')
   }
   syncStore(store, now)
   requireNote(category, otherNote)
@@ -151,6 +197,44 @@ export function startTimer(
     startedAt: now,
     otherNote: category === 'other' ? otherNote?.trim() : undefined,
   }
+}
+
+export function createCustomModule(store: AppStore, title: string, now = Date.now()): CustomTimeModule {
+  const trimmed = title.trim()
+  if (!trimmed) throw new ApiError(400, '请填写时间模块名称')
+  if (trimmed.length > 20) throw new ApiError(400, '时间模块名称不超过 20 个字')
+  const labels = [...Object.values(CATEGORY_LABELS), ...store.customModules.map((item) => item.title)]
+  if (labels.some((label) => label === trimmed)) {
+    throw new ApiError(400, '已有同名时间模块')
+  }
+  const module: CustomTimeModule = {
+    id: `cm-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    title: trimmed,
+    createdAt: now,
+  }
+  store.customModules.push(module)
+  return module
+}
+
+export function deleteTimeModule(store: AppStore, id: string, now = Date.now()) {
+  if (isUndeletableTimeModule(id)) {
+    throw new ApiError(400, id === 'other' ? '其他时间不能删除' : '工作时间和学习时间不能删除')
+  }
+  syncStore(store, now)
+  if (store.activeTimer?.category === id) {
+    stopActiveTimer(store, now)
+  }
+  if (isTimeCategory(id)) {
+    if (!isHiddenTimeCategory(id)) throw new ApiError(400, '该时间模块不能删除')
+    if (store.hiddenCategories.includes(id)) throw new ApiError(404, '时间模块不存在')
+    foldCategoryIntoOther(store, id, CATEGORY_LABELS[id])
+    store.hiddenCategories.push(id)
+    return
+  }
+  const index = store.customModules.findIndex((item) => item.id === id)
+  if (index === -1) throw new ApiError(404, '时间模块不存在')
+  const [removed] = store.customModules.splice(index, 1)
+  foldCategoryIntoOther(store, id, removed.title)
 }
 
 export function stopTimer(store: AppStore, now = Date.now()) {
@@ -426,6 +510,10 @@ export function sumRange(store: AppStore, from: string, to: string, now = Date.n
     total.houseworkMs += day.houseworkMs
     total.socialMs += day.socialMs
     total.otherMs += day.otherMs
+    if (!total.customMs) total.customMs = {}
+    for (const [id, ms] of Object.entries(day.customMs ?? {})) {
+      total.customMs[id] = (total.customMs[id] || 0) + ms
+    }
     total.exerciseMs += day.exerciseMs
     total.exerciseCalories += day.exerciseCalories
     total.pomodoroCount += day.pomodoroCount
@@ -447,5 +535,7 @@ export function liveState(store: AppStore, now = Date.now()) {
     activeTimer: store.activeTimer,
     pomodoro: store.pomodoro,
     now,
+    customModules: store.customModules,
+    hiddenCategories: store.hiddenCategories,
   }
 }

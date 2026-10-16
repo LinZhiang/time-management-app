@@ -9,6 +9,23 @@ export const TIME_CATEGORIES = [
 
 export type TimeCategory = (typeof TIME_CATEGORIES)[number]
 export type TimerCategory = TimeCategory | 'exercise'
+export type TrackedCategory = TimerCategory | string
+
+export const UNDELETABLE_TIME_CATEGORIES = ['work', 'study', 'other'] as const
+export const DELETABLE_BUILTIN_CATEGORIES = ['commute', 'housework', 'social'] as const
+export type HiddenTimeCategory = (typeof DELETABLE_BUILTIN_CATEGORIES)[number]
+
+export interface CustomTimeModule {
+  id: string
+  title: string
+  createdAt: number
+}
+
+export interface VisibleTimeModule {
+  id: string
+  title: string
+  deletable: boolean
+}
 
 export interface OtherDetail {
   note: string
@@ -30,6 +47,7 @@ export interface DayRecord {
   socialMs: number
   otherMs: number
   otherDetails: OtherDetail[]
+  customMs: Record<string, number>
   exerciseMs: number
   exerciseCalories: number
   pomodoroRounds: PomodoroRound[]
@@ -66,7 +84,7 @@ export interface LongTermPlan {
 }
 
 export interface ActiveTimer {
-  category: TimerCategory
+  category: TrackedCategory
   startedAt: number
   otherNote?: string
 }
@@ -91,6 +109,8 @@ export interface AppStore {
   longTerm: LongTermPlan
   activeTimer: ActiveTimer | null
   pomodoro: PomodoroState
+  customModules: CustomTimeModule[]
+  hiddenCategories: HiddenTimeCategory[]
 }
 
 export interface LiveState {
@@ -98,6 +118,8 @@ export interface LiveState {
   activeTimer: ActiveTimer | null
   pomodoro: PomodoroState
   now: number
+  customModules: CustomTimeModule[]
+  hiddenCategories: HiddenTimeCategory[]
 }
 
 export const CATEGORY_LABELS: Record<TimerCategory, string> = {

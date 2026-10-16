@@ -10,6 +10,8 @@ export type InstallUiStatus = 'installed' | 'ready' | 'manual' | 'preparing' | '
 
 export interface BrowserInstallInfo {
   isAndroid: boolean
+  isIos: boolean
+  isIpad: boolean
   isHuaweiBrowser: boolean
   isWeChat: boolean
   isChromeAndroid: boolean
@@ -29,6 +31,8 @@ const browserInstallInfo: BrowserInstallInfo = (() => {
   if (typeof navigator === 'undefined') {
     return {
       isAndroid: false,
+      isIos: false,
+      isIpad: false,
       isHuaweiBrowser: false,
       isWeChat: false,
       isChromeAndroid: false,
@@ -37,14 +41,20 @@ const browserInstallInfo: BrowserInstallInfo = (() => {
   }
   const ua = navigator.userAgent
   const isAndroid = /Android/i.test(ua)
+  const isIpad =
+    /iPad/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const isIos = isIpad || /iPhone|iPod/i.test(ua)
   const isHuaweiBrowser = /HuaweiBrowser|Huawei/i.test(ua)
   const isWeChat = /MicroMessenger/i.test(ua)
   const isChromeAndroid =
     isAndroid && /Chrome\//i.test(ua) && !/Edg\//i.test(ua) && !isHuaweiBrowser
-  const needsManualInstall = isHuaweiBrowser || isWeChat || (isAndroid && !isChromeAndroid)
+  const needsManualInstall =
+    isHuaweiBrowser || isWeChat || isIos || (isAndroid && !isChromeAndroid)
 
   return {
     isAndroid,
+    isIos,
+    isIpad,
     isHuaweiBrowser,
     isWeChat,
     isChromeAndroid,
@@ -143,7 +153,17 @@ export const installUiStatus = computed<InstallUiStatus>(() => {
   return 'preparing'
 })
 
+export const IPAD_INSTALL_STEPS = [
+  '用 Safari 打开本页，不要用微信或其他 App 内置浏览器',
+  '点击屏幕顶部或底部的分享按钮（方框加向上箭头）',
+  '在菜单里找到并点击「添加到主屏幕」',
+  '点右上角「添加」，之后从 iPad 主屏幕图标打开',
+]
+
 export function getManualInstallSteps(info: BrowserInstallInfo = browserInstallInfo): string[] {
+  if (info.isIos) {
+    return IPAD_INSTALL_STEPS
+  }
   if (info.isWeChat) {
     return [
       '微信内无法直接安装，请点击右上角「⋯」',
@@ -178,6 +198,9 @@ export const installStatusHint = computed(() => {
     case 'ready':
       return '可以安装到手机，点击下方按钮即可。'
     case 'manual':
+      if (browserInstallInfo.isIos) {
+        return 'iPad / iPhone 不能用安卓那套一键安装，请点「安装到 iPad」按 Safari 步骤添加到主屏幕。'
+      }
       if (browserInstallInfo.isHuaweiBrowser) {
         return '华为浏览器不支持应用内一键安装，请按下方步骤从菜单添加到主屏幕。'
       }
