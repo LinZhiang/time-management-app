@@ -1,0 +1,7 @@
+name = "taihui-time"
+compatibility_date = "2025-09-21"
+pages_build_output_dir = "./dist"
+
+[[services]]
+binding = "API"
+service = "time-management-app"

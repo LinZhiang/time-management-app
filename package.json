@@ -3,11 +3,15 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite",
     "dev:server": "tsx server/index.ts",
     "build": "vue-tsc -b && vite build",
+    "deploy": "npx vite build && npx wrangler deploy && node scripts/cf-pages-deploy.mjs",
     "deploy:pages": "node scripts/cf-pages-deploy.mjs",
     "start": "tsx server/index.ts",
     "preview": "vite preview"

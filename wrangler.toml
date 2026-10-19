@@ -23,4 +23,4 @@ tag = "v1"
 new_sqlite_classes = ["AppStoreDO"]
 
 [build]
-command = "node scripts/cf-pages-deploy.mjs"
+command = "npx vite build"
