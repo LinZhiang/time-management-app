@@ -95,6 +95,13 @@ export function stopTimer() {
   return request<LiveState>('/api/timer/stop', { method: 'POST', body: '{}' })
 }
 
+export function spendEntertainment(amount: number) {
+  return request<LiveState>('/api/entertainment/spend', {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
+  })
+}
+
 export function savePomodoroSettings(settings: PomodoroSettings) {
   return request<LiveState>('/api/pomodoro/settings', {
     method: 'POST',

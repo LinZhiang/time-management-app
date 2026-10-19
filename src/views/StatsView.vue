@@ -86,6 +86,8 @@ const items = computed(() => {
     rows.push({ label: module.title, value: formatDurationText(ms), raw: ms })
   }
   push('other', '其他时间', data.otherMs)
+  rows.push({ label: '视频时间', value: formatDurationText(data.videoMs || 0), raw: data.videoMs || 0 })
+  rows.push({ label: '游戏时间', value: formatDurationText(data.gameMs || 0), raw: data.gameMs || 0 })
   return rows
 })
 

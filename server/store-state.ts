@@ -2,12 +2,17 @@ import { cloneDay, emptyDay } from '../shared/record.ts'
 import { isHiddenTimeCategory } from '../shared/time-modules.ts'
 import {
   DEFAULT_POMODORO_SETTINGS,
+  ENTERTAINMENT_BONUS,
+  ENTERTAINMENT_DAILY_YUAN,
   type AppStore,
   type CustomTimeModule,
   type DayRecord,
   type HiddenTimeCategory,
   type LongTermPeriod,
   type LongTermPlan,
+  type EntertainmentBonusFlags,
+  type EntertainmentSpend,
+  type EntertainmentWallet,
   type Plan,
   type PomodoroPhase,
 } from '../shared/types.ts'
@@ -63,6 +68,8 @@ function asDay(raw?: DayRecord): DayRecord | undefined {
     otherMs: Number(raw.otherMs) || 0,
     otherDetails: Array.isArray(raw.otherDetails) ? raw.otherDetails : [],
     customMs: normalizeCustomMs(raw.customMs),
+    videoMs: Number(raw.videoMs) || 0,
+    gameMs: Number(raw.gameMs) || 0,
     exerciseMs: Number(raw.exerciseMs) || 0,
     exerciseCalories: Number(raw.exerciseCalories) || 0,
     pomodoroRounds: Array.isArray(raw.pomodoroRounds) ? raw.pomodoroRounds : [],
@@ -106,6 +113,49 @@ export function emptyStore(): AppStore {
     },
     customModules: [],
     hiddenCategories: [],
+    entertainment: emptyEntertainment(),
+  }
+}
+
+export function emptyEntertainment(): EntertainmentWallet {
+  return {
+    balance: 0,
+    bonus: {},
+    spends: [],
+  }
+}
+
+function normalizeEntertainment(raw: AppStore['entertainment'] | undefined): EntertainmentWallet {
+  const base = emptyEntertainment()
+  if (!raw || typeof raw !== 'object') return base
+  const bonus: Record<string, EntertainmentBonusFlags> = {}
+  if (raw.bonus && typeof raw.bonus === 'object') {
+    for (const [date, flags] of Object.entries(raw.bonus)) {
+      if (!flags || typeof flags !== 'object') continue
+      bonus[date] = {
+        daily: Boolean(flags.daily),
+        work: Boolean(flags.work),
+        study: Boolean(flags.study),
+        commute: Boolean(flags.commute),
+        social: Boolean(flags.social),
+        housework: Boolean(flags.housework),
+      }
+    }
+  }
+  const spends: EntertainmentSpend[] = Array.isArray(raw.spends)
+    ? raw.spends
+        .filter((item) => item?.id && Number(item.amount) > 0)
+        .map((item) => ({
+          id: item.id,
+          date: item.date || '',
+          amount: Number(item.amount) || 0,
+          createdAt: Number(item.createdAt) || 0,
+        }))
+    : []
+  return {
+    balance: Math.max(0, Math.round((Number(raw.balance) || 0) * 100) / 100),
+    bonus,
+    spends,
   }
 }
 
@@ -146,6 +196,7 @@ export function normalizeStore(raw: Partial<AppStore> | null | undefined): AppSt
     },
     customModules: normalizeCustomModules(raw.customModules),
     hiddenCategories: normalizeHiddenCategories(raw.hiddenCategories),
+    entertainment: normalizeEntertainment(raw.entertainment),
   }
 }
 
@@ -156,6 +207,7 @@ export function storeHasUserData(store: AppStore): boolean {
     Object.keys(store.days).length > 0 ||
     store.plans.length > 0 ||
     store.customModules.length > 0 ||
+    store.entertainment.balance > 0 ||
     store.longTerm.periods.length > 0 ||
     Boolean(store.longTerm.overview.title || store.longTerm.overview.detail)
   )
@@ -190,6 +242,8 @@ function mergeDay(left?: DayRecord, right?: DayRecord): DayRecord | undefined {
     otherMs: Math.max(first.otherMs, second.otherMs),
     otherDetails,
     customMs,
+    videoMs: Math.max(first.videoMs, second.videoMs),
+    gameMs: Math.max(first.gameMs, second.gameMs),
     exerciseMs: Math.max(first.exerciseMs, second.exerciseMs),
     exerciseCalories: Math.max(first.exerciseCalories, second.exerciseCalories),
     pomodoroRounds: rounds.sort((a, b) => a.completedAt - b.completedAt),
@@ -235,5 +289,35 @@ export function mergeStore(
     pomodoro: left.pomodoro.startedAt ? left.pomodoro : right.pomodoro.startedAt ? right.pomodoro : left.pomodoro,
     customModules: normalizeCustomModules([...left.customModules, ...right.customModules]),
     hiddenCategories: normalizeHiddenCategories([...left.hiddenCategories, ...right.hiddenCategories]),
+    entertainment: mergeEntertainment(left.entertainment, right.entertainment),
+  }
+}
+
+function entertainmentGrantedYuan(bonus: Record<string, EntertainmentBonusFlags>) {
+  let sum = 0
+  for (const flags of Object.values(bonus)) {
+    if (flags.daily) sum += ENTERTAINMENT_DAILY_YUAN
+    if (flags.work) sum += ENTERTAINMENT_BONUS.work
+    if (flags.study) sum += ENTERTAINMENT_BONUS.study
+    if (flags.commute) sum += ENTERTAINMENT_BONUS.commute
+    if (flags.social) sum += ENTERTAINMENT_BONUS.social
+    if (flags.housework) sum += ENTERTAINMENT_BONUS.housework
+  }
+  return sum
+}
+
+function mergeEntertainment(left: EntertainmentWallet, right: EntertainmentWallet): EntertainmentWallet {
+  const bonus: Record<string, EntertainmentBonusFlags> = { ...left.bonus }
+  for (const [date, flags] of Object.entries(right.bonus)) {
+    bonus[date] = { ...bonus[date], ...flags }
+  }
+  const spends = new Map<string, EntertainmentSpend>()
+  for (const item of [...left.spends, ...right.spends]) spends.set(item.id, item)
+  const spendList = [...spends.values()].sort((a, b) => b.createdAt - a.createdAt)
+  const spent = spendList.reduce((sum, item) => sum + item.amount, 0)
+  return {
+    balance: Math.max(0, Math.round((entertainmentGrantedYuan(bonus) - spent) * 100) / 100),
+    bonus,
+    spends: spendList,
   }
 }

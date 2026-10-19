@@ -8,6 +8,7 @@ const tabs = [
   { path: '/time', label: '时间管理', icon: 'time' },
   { path: '/pomodoro', label: '番茄学习', icon: 'pomodoro' },
   { path: '/exercise', label: '运动管理', icon: 'exercise' },
+  { path: '/fun', label: '娱乐管理', icon: 'fun' },
   { path: '/plans', label: '计划安排', icon: 'plans' },
   { path: '/logs', label: '查看日志', icon: 'logs' },
 ]

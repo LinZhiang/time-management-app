@@ -8,7 +8,8 @@ export const TIME_CATEGORIES = [
 ] as const
 
 export type TimeCategory = (typeof TIME_CATEGORIES)[number]
-export type TimerCategory = TimeCategory | 'exercise'
+export type EntertainmentCategory = 'video' | 'game'
+export type TimerCategory = TimeCategory | 'exercise' | EntertainmentCategory
 export type TrackedCategory = TimerCategory | string
 
 export const UNDELETABLE_TIME_CATEGORIES = ['work', 'study', 'other'] as const
@@ -48,6 +49,8 @@ export interface DayRecord {
   otherMs: number
   otherDetails: OtherDetail[]
   customMs: Record<string, number>
+  videoMs: number
+  gameMs: number
   exerciseMs: number
   exerciseCalories: number
   pomodoroRounds: PomodoroRound[]
@@ -102,6 +105,40 @@ export interface PomodoroState {
   settings: PomodoroSettings
 }
 
+export interface EntertainmentBonusFlags {
+  daily?: boolean
+  work?: boolean
+  study?: boolean
+  commute?: boolean
+  social?: boolean
+  housework?: boolean
+}
+
+export interface EntertainmentSpend {
+  id: string
+  date: string
+  amount: number
+  createdAt: number
+}
+
+export interface EntertainmentWallet {
+  balance: number
+  bonus: Record<string, EntertainmentBonusFlags>
+  spends: EntertainmentSpend[]
+}
+
+export interface EntertainmentLive {
+  balance: number
+  videoMs: number
+  gameMs: number
+  videoLimitMs: number
+  gameLimitMs: number
+  videoRemainingMs: number
+  gameRemainingMs: number
+  grantsToday: EntertainmentBonusFlags
+  spendsToday: EntertainmentSpend[]
+}
+
 export interface AppStore {
   authToken: string | null
   days: Record<string, DayRecord>
@@ -111,6 +148,7 @@ export interface AppStore {
   pomodoro: PomodoroState
   customModules: CustomTimeModule[]
   hiddenCategories: HiddenTimeCategory[]
+  entertainment: EntertainmentWallet
 }
 
 export interface LiveState {
@@ -120,6 +158,7 @@ export interface LiveState {
   now: number
   customModules: CustomTimeModule[]
   hiddenCategories: HiddenTimeCategory[]
+  entertainment: EntertainmentLive
 }
 
 export const CATEGORY_LABELS: Record<TimerCategory, string> = {
@@ -130,6 +169,8 @@ export const CATEGORY_LABELS: Record<TimerCategory, string> = {
   social: '应酬出行时间',
   other: '其他时间',
   exercise: '运动时间',
+  video: '视频时间',
+  game: '游戏时间',
 }
 
 export const DEFAULT_POMODORO_SETTINGS: PomodoroSettings = {
@@ -145,3 +186,14 @@ export const STUDY_MINUTES_MAX = 52
 export const REST_MINUTES_MIN = 7
 export const REST_MINUTES_MAX = 15
 export const EXERCISE_MIN_MS = 30 * 60 * 1000
+export const HOUR_MS = 60 * 60 * 1000
+export const VIDEO_LIMIT_MS = HOUR_MS
+export const GAME_LIMIT_MS = 30 * 60 * 1000
+export const ENTERTAINMENT_DAILY_YUAN = 5
+export const ENTERTAINMENT_BONUS = {
+  work: 1,
+  study: 2.5,
+  commute: 1,
+  social: 1,
+  housework: 2,
+} as const

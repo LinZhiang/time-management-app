@@ -47,7 +47,7 @@ onUnmounted(() => {
 
     <main class="app-main">
       <RouterView v-slot="{ Component }">
-        <KeepAlive include="TimeManageView,PomodoroView,ExerciseView,PlanView">
+        <KeepAlive include="TimeManageView,PomodoroView,ExerciseView,EntertainmentView,PlanView">
           <component :is="Component" />
         </KeepAlive>
       </RouterView>

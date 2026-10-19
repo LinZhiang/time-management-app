@@ -19,6 +19,7 @@ import {
   listPlans,
   saveLongTermOverview,
   startExercise,
+  spendEntertainment,
   startPomodoro,
   startTimer,
   stopExercise,
@@ -163,6 +164,21 @@ export function createApp(withStore: StoreRunner) {
       await requireAuth(c)
       const state = await withStore((store) => {
         stopTimer(store)
+        return liveState(store)
+      })
+      return c.json(state)
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.post('/api/entertainment/spend', async (c) => {
+    try {
+      await requireAuth(c)
+      const body = await c.req.json<{ amount?: number }>().catch(() => null)
+      const state = await withStore((store) => {
+        spendEntertainment(store, body?.amount)
         return liveState(store)
       })
       return c.json(state)

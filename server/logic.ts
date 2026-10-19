@@ -1,13 +1,19 @@
 import { dateKey, isValidDateKey, nextDayKey, startOfDay } from '../shared/date.ts'
 import { addCategoryTime, addOtherDetail, cloneDay, emptyDay, ensureDay } from '../shared/record.ts'
 import {
+  isEntertainmentCategory,
   isHiddenTimeCategory,
   isTimeCategory,
   isUndeletableTimeModule,
 } from '../shared/time-modules.ts'
 import {
+  ENTERTAINMENT_BONUS,
+  ENTERTAINMENT_DAILY_YUAN,
   EXERCISE_MIN_MS,
+  GAME_LIMIT_MS,
+  HOUR_MS,
   POMODORO_BUFFER_MS,
+  VIDEO_LIMIT_MS,
   REST_MINUTES_MAX,
   REST_MINUTES_MIN,
   STUDY_MINUTES_MAX,
@@ -20,6 +26,8 @@ import {
   type PomodoroSettings,
   CATEGORY_LABELS,
   type CustomTimeModule,
+  type EntertainmentBonusFlags,
+  type EntertainmentLive,
   type TimeCategory,
   type TrackedCategory,
 } from '../shared/types.ts'
@@ -130,11 +138,79 @@ function requireNote(category: TrackedCategory, otherNote?: string) {
 }
 
 function isAllowedTimerCategory(store: AppStore, category: string) {
+  if (isEntertainmentCategory(category)) return true
   if (category === 'exercise') return false
   if (isTimeCategory(category)) {
     return !isHiddenTimeCategory(category) || !store.hiddenCategories.includes(category)
   }
   return store.customModules.some((item) => item.id === category)
+}
+
+function roundYuan(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+function ensureEntertainment(store: AppStore) {
+  if (!store.entertainment) {
+    store.entertainment = { balance: 0, bonus: {}, spends: [] }
+  }
+  if (!store.entertainment.bonus) store.entertainment.bonus = {}
+  if (!store.entertainment.spends) store.entertainment.spends = []
+}
+
+function entertainmentRemaining(day: DayRecord, category: 'video' | 'game') {
+  const used = category === 'video' ? day.videoMs || 0 : day.gameMs || 0
+  const limit = category === 'video' ? VIDEO_LIMIT_MS : GAME_LIMIT_MS
+  return Math.max(0, limit - used)
+}
+
+function capEntertainmentTimer(store: AppStore, now: number) {
+  const timer = store.activeTimer
+  if (!timer || !isEntertainmentCategory(timer.category)) return
+  const day = ensureDay(store, dateKey(timer.startedAt))
+  const remaining = entertainmentRemaining(day, timer.category)
+  const elapsed = elapsedSince(timer.startedAt, now)
+  if (elapsed >= remaining) {
+    stopActiveTimer(store, timer.startedAt + remaining)
+  }
+}
+
+function grantBonus(store: AppStore, date: string, key: keyof EntertainmentBonusFlags, amount: number) {
+  const flags = store.entertainment.bonus[date] || {}
+  if (flags[key]) return
+  store.entertainment.balance = roundYuan(store.entertainment.balance + amount)
+  flags[key] = true
+  store.entertainment.bonus[date] = flags
+}
+
+function applyEntertainment(store: AppStore, now: number) {
+  ensureEntertainment(store)
+  capEntertainmentTimer(store, now)
+  const today = dateKey(now)
+  grantBonus(store, today, 'daily', ENTERTAINMENT_DAILY_YUAN)
+  const live = withLiveTimer(todayRecord(store, now), store.activeTimer, now)
+  if (live.workMs >= HOUR_MS) grantBonus(store, today, 'work', ENTERTAINMENT_BONUS.work)
+  if (live.studyMs >= HOUR_MS) grantBonus(store, today, 'study', ENTERTAINMENT_BONUS.study)
+  if (live.commuteMs >= HOUR_MS) grantBonus(store, today, 'commute', ENTERTAINMENT_BONUS.commute)
+  if (live.socialMs >= HOUR_MS) grantBonus(store, today, 'social', ENTERTAINMENT_BONUS.social)
+  if (live.houseworkMs >= HOUR_MS) grantBonus(store, today, 'housework', ENTERTAINMENT_BONUS.housework)
+}
+
+function entertainmentLive(store: AppStore, now: number): EntertainmentLive {
+  ensureEntertainment(store)
+  const today = dateKey(now)
+  const day = withLiveTimer(todayRecord(store, now), store.activeTimer, now)
+  return {
+    balance: store.entertainment.balance,
+    videoMs: day.videoMs || 0,
+    gameMs: day.gameMs || 0,
+    videoLimitMs: VIDEO_LIMIT_MS,
+    gameLimitMs: GAME_LIMIT_MS,
+    videoRemainingMs: entertainmentRemaining(day, 'video'),
+    gameRemainingMs: entertainmentRemaining(day, 'game'),
+    grantsToday: store.entertainment.bonus[today] || {},
+    spendsToday: store.entertainment.spends.filter((item) => item.date === today),
+  }
 }
 
 function builtinMs(day: DayRecord, category: TimeCategory) {
@@ -168,6 +244,7 @@ function foldCategoryIntoOther(store: AppStore, category: string, label: string)
 export function syncStore(store: AppStore, now = Date.now()) {
   rollover(store, now)
   syncPomodoro(store, now)
+  applyEntertainment(store, now)
   return store
 }
 
@@ -184,6 +261,12 @@ export function startTimer(
     throw new ApiError(400, '该时间模块不存在或已删除')
   }
   syncStore(store, now)
+  if (isEntertainmentCategory(category)) {
+    const remaining = entertainmentRemaining(ensureDay(store, dateKey(now)), category)
+    if (remaining <= 0) {
+      throw new ApiError(400, category === 'video' ? '今日视频时间已达 1 小时上限' : '今日游戏时间已达 30 分钟上限')
+    }
+  }
   requireNote(category, otherNote)
   if (store.pomodoro.phase !== 'idle' && category !== 'study') {
     idlePomodoro(store)
@@ -235,6 +318,25 @@ export function deleteTimeModule(store: AppStore, id: string, now = Date.now()) 
   if (index === -1) throw new ApiError(404, '时间模块不存在')
   const [removed] = store.customModules.splice(index, 1)
   foldCategoryIntoOther(store, id, removed.title)
+}
+
+export function spendEntertainment(store: AppStore, amount: number | undefined, now = Date.now()) {
+  syncStore(store, now)
+  const yuan = Number(amount)
+  if (!Number.isFinite(yuan) || yuan <= 0) {
+    throw new ApiError(400, '请填写大于 0 的扣除金额')
+  }
+  const rounded = roundYuan(yuan)
+  if (rounded > store.entertainment.balance + 1e-9) {
+    throw new ApiError(400, '娱乐金额不足')
+  }
+  store.entertainment.balance = roundYuan(store.entertainment.balance - rounded)
+  store.entertainment.spends.unshift({
+    id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
+    date: dateKey(now),
+    amount: rounded,
+    createdAt: now,
+  })
 }
 
 export function stopTimer(store: AppStore, now = Date.now()) {
@@ -514,6 +616,8 @@ export function sumRange(store: AppStore, from: string, to: string, now = Date.n
     for (const [id, ms] of Object.entries(day.customMs ?? {})) {
       total.customMs[id] = (total.customMs[id] || 0) + ms
     }
+    total.videoMs += day.videoMs || 0
+    total.gameMs += day.gameMs || 0
     total.exerciseMs += day.exerciseMs
     total.exerciseCalories += day.exerciseCalories
     total.pomodoroCount += day.pomodoroCount
@@ -537,5 +641,6 @@ export function liveState(store: AppStore, now = Date.now()) {
     now,
     customModules: store.customModules,
     hiddenCategories: store.hiddenCategories,
+    entertainment: entertainmentLive(store, now),
   }
 }

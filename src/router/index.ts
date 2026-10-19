@@ -39,6 +39,12 @@ const router = createRouter({
       meta: { title: '运动管理' },
     },
     {
+      path: '/fun',
+      name: 'fun',
+      component: () => import('../views/EntertainmentView.vue'),
+      meta: { title: '娱乐管理' },
+    },
+    {
       path: '/plans',
       name: 'plans',
       component: () => import('../views/PlanView.vue'),

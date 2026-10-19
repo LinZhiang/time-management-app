@@ -14,6 +14,10 @@ export function isTimeCategory(value: string): value is TimeCategory {
   return (TIME_CATEGORIES as readonly string[]).includes(value)
 }
 
+export function isEntertainmentCategory(value: string): value is 'video' | 'game' {
+  return value === 'video' || value === 'game'
+}
+
 export function isHiddenTimeCategory(value: string): value is HiddenTimeCategory {
   return (DELETABLE_BUILTIN_CATEGORIES as readonly string[]).includes(value)
 }

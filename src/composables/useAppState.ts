@@ -12,6 +12,7 @@ import {
   stopTimer,
   createTimeModule,
   deleteTimeModule,
+  spendEntertainment,
 } from '../api/client'
 import { dateKey } from '../../shared/date.ts'
 import type { LiveState, PomodoroPhase, PomodoroSettings } from '../../shared/types.ts'
@@ -130,7 +131,11 @@ export function useAppState() {
                 ? day.socialMs
                 : category === 'other'
                   ? day.otherMs
-                  : day.customMs?.[category] || 0
+                  : category === 'video'
+                    ? day.videoMs || 0
+                    : category === 'game'
+                      ? day.gameMs || 0
+                      : day.customMs?.[category] || 0
     return activeTimer.value?.category === category ? base + extraElapsed() : base
   }
 
@@ -189,6 +194,10 @@ export function useAppState() {
     applyState(await run(() => deleteTimeModule(id)))
   }
 
+  async function handleSpendEntertainment(amount: number) {
+    applyState(await run(() => spendEntertainment(amount)))
+  }
+
   return {
     state,
     now,
@@ -200,6 +209,7 @@ export function useAppState() {
     pomodoro,
     customModules: computed(() => state.value?.customModules ?? []),
     hiddenCategories: computed(() => state.value?.hiddenCategories ?? []),
+    entertainment: computed(() => state.value?.entertainment ?? null),
     categoryDisplayMs,
     refreshState,
     handleStartTimer,
@@ -213,5 +223,6 @@ export function useAppState() {
     handleStopExercise,
     handleCreateTimeModule,
     handleDeleteTimeModule,
+    handleSpendEntertainment,
   }
 }
