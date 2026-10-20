@@ -92,6 +92,16 @@ export function playExerciseStartSound() {
   playKey('activity')
 }
 
+/** 娱乐时间还剩 3 分钟 */
+export function playEntertainmentWarnSound() {
+  playKey('classEnd')
+}
+
+/** 娱乐时间到 */
+export function playEntertainmentEndSound() {
+  playKey('activity')
+}
+
 export function setupGlobalAudioUnlock() {
   const handler = () => unlockAudio()
   document.addEventListener('pointerdown', handler, { once: true, passive: true })

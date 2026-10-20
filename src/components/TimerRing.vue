@@ -5,7 +5,7 @@ const props = defineProps<{
   progress: number
   time: string
   hint: string
-  variant?: 'study' | 'rest' | 'alert' | 'exercise'
+  variant?: 'study' | 'rest' | 'alert' | 'exercise' | 'fun'
 }>()
 
 const offset = computed(() =>
@@ -68,6 +68,10 @@ const offset = computed(() =>
 .timer-ring__progress--alert,
 .timer-ring__progress--exercise {
   stroke: #c45c26;
+}
+
+.timer-ring__progress--fun {
+  stroke: #7a5ea6;
 }
 
 .timer-ring__center {

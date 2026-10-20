@@ -12,11 +12,23 @@ import {
   stopTimer,
   createTimeModule,
   deleteTimeModule,
+  extendEntertainment,
   spendEntertainment,
 } from '../api/client'
 import { dateKey } from '../../shared/date.ts'
-import type { LiveState, PomodoroPhase, PomodoroSettings } from '../../shared/types.ts'
+import { isEntertainmentCategory } from '../../shared/time-modules.ts'
 import {
+  ENTERTAINMENT_WARN_MS,
+  GAME_LIMIT_MS,
+  VIDEO_LIMIT_MS,
+  type EntertainmentCategory,
+  type LiveState,
+  type PomodoroPhase,
+  type PomodoroSettings,
+} from '../../shared/types.ts'
+import {
+  playEntertainmentEndSound,
+  playEntertainmentWarnSound,
   playExerciseStartSound,
   playRestStartSound,
   playStartSound,
@@ -32,6 +44,10 @@ let tickTimer: ReturnType<typeof setInterval> | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let started = false
 let lastPomodoroPhase: PomodoroPhase | null = null
+let entertainmentSession: string | null = null
+let entertainmentWarnPlayed = false
+let entertainmentEndPlayed = false
+let entertainmentStopping = false
 
 function playPomodoroPhaseSound(previous: PomodoroPhase | null, next: PomodoroPhase) {
   if (!previous || previous === next) return
@@ -42,11 +58,80 @@ function playPomodoroPhaseSound(previous: PomodoroPhase | null, next: PomodoroPh
 
 function applyState(next: LiveState) {
   const previousPhase = lastPomodoroPhase
+  const previousTimer = state.value?.activeTimer
   state.value = next
   now.value = next.now || Date.now()
   error.value = ''
   lastPomodoroPhase = next.pomodoro.phase
   playPomodoroPhaseSound(previousPhase, next.pomodoro.phase)
+  if (
+    previousTimer &&
+    isEntertainmentCategory(previousTimer.category) &&
+    next.activeTimer?.category !== previousTimer.category &&
+    !entertainmentEndPlayed
+  ) {
+    const remaining =
+      previousTimer.category === 'video' ? next.entertainment.videoRemainingMs : next.entertainment.gameRemainingMs
+    if (remaining <= 0) {
+      entertainmentEndPlayed = true
+      playEntertainmentEndSound()
+    }
+  }
+  tickEntertainmentAlarms()
+}
+
+function extraElapsedMs() {
+  const syncedAt = state.value?.now ?? now.value
+  return Math.max(0, now.value - syncedAt)
+}
+
+function liveEntertainmentRemaining(category: EntertainmentCategory) {
+  const live = state.value?.entertainment
+  if (!live) return category === 'video' ? VIDEO_LIMIT_MS : GAME_LIMIT_MS
+  const remaining = category === 'video' ? live.videoRemainingMs : live.gameRemainingMs
+  const running = state.value?.activeTimer?.category === category
+  return Math.max(0, running ? remaining - extraElapsedMs() : remaining)
+}
+
+function resetEntertainmentAlarms() {
+  entertainmentSession = null
+  entertainmentWarnPlayed = false
+  entertainmentEndPlayed = false
+}
+
+function tickEntertainmentAlarms() {
+  const timer = state.value?.activeTimer
+  if (!timer || !isEntertainmentCategory(timer.category)) {
+    resetEntertainmentAlarms()
+    return
+  }
+  const session = `${timer.category}-${timer.startedAt}`
+  if (entertainmentSession !== session) {
+    entertainmentSession = session
+    entertainmentWarnPlayed = false
+    entertainmentEndPlayed = false
+  }
+  const remaining = liveEntertainmentRemaining(timer.category)
+  if (remaining > ENTERTAINMENT_WARN_MS) entertainmentWarnPlayed = false
+  if (remaining <= 0) {
+    if (entertainmentEndPlayed || entertainmentStopping) return
+    entertainmentEndPlayed = true
+    entertainmentStopping = true
+    playEntertainmentEndSound()
+    void stopTimer()
+      .then((next) => applyState(next))
+      .catch(() => {
+        entertainmentEndPlayed = false
+      })
+      .finally(() => {
+        entertainmentStopping = false
+      })
+    return
+  }
+  if (!entertainmentWarnPlayed && remaining <= ENTERTAINMENT_WARN_MS) {
+    entertainmentWarnPlayed = true
+    playEntertainmentWarnSound()
+  }
 }
 
 async function run<T>(fn: () => Promise<T>) {
@@ -83,6 +168,7 @@ export async function setupAppState() {
   now.value = Date.now()
   tickTimer = setInterval(() => {
     now.value = Date.now()
+    tickEntertainmentAlarms()
   }, 1000)
   pollTimer = setInterval(() => {
     void refreshState().catch(() => undefined)
@@ -97,6 +183,7 @@ export function teardownAppState() {
   if (!started) return
   started = false
   lastPomodoroPhase = null
+  resetEntertainmentAlarms()
   if (tickTimer) clearInterval(tickTimer)
   if (pollTimer) clearInterval(pollTimer)
   tickTimer = null
@@ -111,8 +198,23 @@ export function useAppState() {
   const todayKey = computed(() => dateKey(now.value))
 
   function extraElapsed() {
-    const syncedAt = state.value?.now ?? now.value
-    return Math.max(0, now.value - syncedAt)
+    return extraElapsedMs()
+  }
+
+  function entertainmentRemainingMs(category: EntertainmentCategory) {
+    return liveEntertainmentRemaining(category)
+  }
+
+  function entertainmentLimitMs(category: EntertainmentCategory) {
+    const live = state.value?.entertainment
+    if (!live) return category === 'video' ? VIDEO_LIMIT_MS : GAME_LIMIT_MS
+    return category === 'video' ? live.videoLimitMs : live.gameLimitMs
+  }
+
+  function entertainmentBoughtMs(category: EntertainmentCategory) {
+    const live = state.value?.entertainment
+    if (!live) return 0
+    return category === 'video' ? live.videoBoughtMs || 0 : live.gameBoughtMs || 0
   }
 
   function categoryDisplayMs(category: string) {
@@ -145,9 +247,11 @@ export function useAppState() {
     applyState(await run(() => startTimer(category, otherNote)))
   }
 
-  async function handleStopTimer() {
-    unlockAudio()
-    playStartSound()
+  async function handleStopTimer(options?: { silent?: boolean }) {
+    if (!options?.silent) {
+      unlockAudio()
+      playStartSound()
+    }
     applyState(await run(() => stopTimer()))
   }
 
@@ -198,6 +302,10 @@ export function useAppState() {
     applyState(await run(() => spendEntertainment(amount)))
   }
 
+  async function handleExtendEntertainment(category: EntertainmentCategory, amount: number) {
+    applyState(await run(() => extendEntertainment(category, amount)))
+  }
+
   return {
     state,
     now,
@@ -211,6 +319,9 @@ export function useAppState() {
     hiddenCategories: computed(() => state.value?.hiddenCategories ?? []),
     entertainment: computed(() => state.value?.entertainment ?? null),
     categoryDisplayMs,
+    entertainmentRemainingMs,
+    entertainmentLimitMs,
+    entertainmentBoughtMs,
     refreshState,
     handleStartTimer,
     handleStopTimer,
@@ -224,5 +335,6 @@ export function useAppState() {
     handleCreateTimeModule,
     handleDeleteTimeModule,
     handleSpendEntertainment,
+    handleExtendEntertainment,
   }
 }

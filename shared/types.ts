@@ -51,6 +51,8 @@ export interface DayRecord {
   customMs: Record<string, number>
   videoMs: number
   gameMs: number
+  videoBoughtMs: number
+  gameBoughtMs: number
   exerciseMs: number
   exerciseCalories: number
   pomodoroRounds: PomodoroRound[]
@@ -119,6 +121,10 @@ export interface EntertainmentSpend {
   date: string
   amount: number
   createdAt: number
+  kind?: 'consume' | 'extend'
+  category?: EntertainmentCategory
+  extraMs?: number
+  note?: string
 }
 
 export interface EntertainmentWallet {
@@ -131,6 +137,8 @@ export interface EntertainmentLive {
   balance: number
   videoMs: number
   gameMs: number
+  videoBoughtMs: number
+  gameBoughtMs: number
   videoLimitMs: number
   gameLimitMs: number
   videoRemainingMs: number
@@ -189,6 +197,9 @@ export const EXERCISE_MIN_MS = 30 * 60 * 1000
 export const HOUR_MS = 60 * 60 * 1000
 export const VIDEO_LIMIT_MS = HOUR_MS
 export const GAME_LIMIT_MS = 30 * 60 * 1000
+export const VIDEO_MS_PER_YUAN = 3 * 60 * 1000
+export const GAME_MS_PER_YUAN = 1.5 * 60 * 1000
+export const ENTERTAINMENT_WARN_MS = 3 * 60 * 1000
 export const ENTERTAINMENT_DAILY_YUAN = 5
 export const ENTERTAINMENT_BONUS = {
   work: 1,

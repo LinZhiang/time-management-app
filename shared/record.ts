@@ -1,5 +1,14 @@
 import { isEntertainmentCategory, isTimeCategory } from './time-modules.ts'
-import { GAME_LIMIT_MS, VIDEO_LIMIT_MS, type AppStore, type DayRecord, type TrackedCategory } from './types.ts'
+import {
+  GAME_LIMIT_MS,
+  GAME_MS_PER_YUAN,
+  VIDEO_LIMIT_MS,
+  VIDEO_MS_PER_YUAN,
+  type AppStore,
+  type DayRecord,
+  type EntertainmentCategory,
+  type TrackedCategory,
+} from './types.ts'
 
 export function emptyDay(date: string): DayRecord {
   return {
@@ -14,6 +23,8 @@ export function emptyDay(date: string): DayRecord {
     customMs: {},
     videoMs: 0,
     gameMs: 0,
+    videoBoughtMs: 0,
+    gameBoughtMs: 0,
     exerciseMs: 0,
     exerciseCalories: 0,
     pomodoroRounds: [],
@@ -29,6 +40,8 @@ export function cloneDay(day: DayRecord): DayRecord {
     customMs: { ...(day.customMs ?? {}) },
     videoMs: Number(day.videoMs) || 0,
     gameMs: Number(day.gameMs) || 0,
+    videoBoughtMs: Number(day.videoBoughtMs) || 0,
+    gameBoughtMs: Number(day.gameBoughtMs) || 0,
     pomodoroRounds: (day.pomodoroRounds ?? []).map((item) => ({ ...item })),
   }
 }
@@ -56,6 +69,28 @@ export function addOtherDetail(day: DayRecord, note: string, ms: number) {
   else day.otherDetails.push({ note: label, ms })
 }
 
+export function entertainmentBoughtMs(day: DayRecord, category: EntertainmentCategory) {
+  return category === 'video' ? day.videoBoughtMs || 0 : day.gameBoughtMs || 0
+}
+
+export function entertainmentLimitMs(day: DayRecord, category: EntertainmentCategory) {
+  const base = category === 'video' ? VIDEO_LIMIT_MS : GAME_LIMIT_MS
+  return base + entertainmentBoughtMs(day, category)
+}
+
+export function entertainmentUsedMs(day: DayRecord, category: EntertainmentCategory) {
+  return category === 'video' ? day.videoMs || 0 : day.gameMs || 0
+}
+
+export function entertainmentRemainingMs(day: DayRecord, category: EntertainmentCategory) {
+  return Math.max(0, entertainmentLimitMs(day, category) - entertainmentUsedMs(day, category))
+}
+
+export function extraMsForYuan(category: EntertainmentCategory, yuan: number) {
+  const perYuan = category === 'video' ? VIDEO_MS_PER_YUAN : GAME_MS_PER_YUAN
+  return Math.round(yuan * perYuan)
+}
+
 export function addCategoryTime(
   day: DayRecord,
   category: TrackedCategory,
@@ -73,9 +108,7 @@ export function addCategoryTime(
   else if (category === 'social') day.socialMs += ms
   else if (category === 'exercise') day.exerciseMs += ms
   else if (isEntertainmentCategory(category)) {
-    const used = category === 'video' ? day.videoMs : day.gameMs
-    const limit = category === 'video' ? VIDEO_LIMIT_MS : GAME_LIMIT_MS
-    const add = Math.min(ms, Math.max(0, limit - used))
+    const add = Math.min(ms, entertainmentRemainingMs(day, category))
     if (add <= 0) return
     if (category === 'video') day.videoMs += add
     else day.gameMs += add

@@ -60,7 +60,9 @@ function dayRows(day: DayRecord) {
   }
   push('other', '其他时间', formatDurationText(day.otherMs))
   rows.push({ label: '视频时间', value: formatDurationText(day.videoMs || 0) })
+  if (day.videoBoughtMs) rows.push({ label: '视频加时', value: formatDurationText(day.videoBoughtMs) })
   rows.push({ label: '游戏时间', value: formatDurationText(day.gameMs || 0) })
+  if (day.gameBoughtMs) rows.push({ label: '游戏加时', value: formatDurationText(day.gameBoughtMs) })
   rows.push({ label: '锻炼时间', value: formatDurationText(day.exerciseMs) })
   rows.push({ label: '锻炼大卡量', value: `${day.exerciseCalories} 大卡` })
   rows.push({ label: '番茄量', value: `${day.pomodoroCount} 轮` })

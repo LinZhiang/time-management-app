@@ -41,8 +41,6 @@ function deployPages() {
     '--project-name',
     projectName,
     '--commit-dirty=true',
-    '--config',
-    'wrangler.pages.toml',
   ])
   if (result.status !== 0) {
     throw new Error('wrangler pages deploy 失败')

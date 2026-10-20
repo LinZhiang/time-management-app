@@ -19,6 +19,7 @@ import {
   listPlans,
   saveLongTermOverview,
   startExercise,
+  extendEntertainment,
   spendEntertainment,
   startPomodoro,
   startTimer,
@@ -179,6 +180,21 @@ export function createApp(withStore: StoreRunner) {
       const body = await c.req.json<{ amount?: number }>().catch(() => null)
       const state = await withStore((store) => {
         spendEntertainment(store, body?.amount)
+        return liveState(store)
+      })
+      return c.json(state)
+    } catch (error) {
+      const { status, body } = jsonError(error)
+      return c.json(body, status)
+    }
+  })
+
+  app.post('/api/entertainment/extend', async (c) => {
+    try {
+      await requireAuth(c)
+      const body = await c.req.json<{ amount?: number; category?: string }>().catch(() => null)
+      const state = await withStore((store) => {
+        extendEntertainment(store, body?.category, body?.amount)
         return liveState(store)
       })
       return c.json(state)

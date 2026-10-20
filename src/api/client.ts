@@ -102,6 +102,13 @@ export function spendEntertainment(amount: number) {
   })
 }
 
+export function extendEntertainment(category: string, amount: number) {
+  return request<LiveState>('/api/entertainment/extend', {
+    method: 'POST',
+    body: JSON.stringify({ category, amount }),
+  })
+}
+
 export function savePomodoroSettings(settings: PomodoroSettings) {
   return request<LiveState>('/api/pomodoro/settings', {
     method: 'POST',

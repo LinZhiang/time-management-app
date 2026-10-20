@@ -70,6 +70,8 @@ function asDay(raw?: DayRecord): DayRecord | undefined {
     customMs: normalizeCustomMs(raw.customMs),
     videoMs: Number(raw.videoMs) || 0,
     gameMs: Number(raw.gameMs) || 0,
+    videoBoughtMs: Number(raw.videoBoughtMs) || 0,
+    gameBoughtMs: Number(raw.gameBoughtMs) || 0,
     exerciseMs: Number(raw.exerciseMs) || 0,
     exerciseCalories: Number(raw.exerciseCalories) || 0,
     pomodoroRounds: Array.isArray(raw.pomodoroRounds) ? raw.pomodoroRounds : [],
@@ -150,6 +152,10 @@ function normalizeEntertainment(raw: AppStore['entertainment'] | undefined): Ent
           date: item.date || '',
           amount: Number(item.amount) || 0,
           createdAt: Number(item.createdAt) || 0,
+          kind: item.kind === 'extend' ? 'extend' : 'consume',
+          category: item.category === 'game' ? 'game' : item.category === 'video' ? 'video' : undefined,
+          extraMs: Number(item.extraMs) || 0,
+          note: typeof item.note === 'string' ? item.note : '',
         }))
     : []
   return {
@@ -244,6 +250,8 @@ function mergeDay(left?: DayRecord, right?: DayRecord): DayRecord | undefined {
     customMs,
     videoMs: Math.max(first.videoMs, second.videoMs),
     gameMs: Math.max(first.gameMs, second.gameMs),
+    videoBoughtMs: Math.max(first.videoBoughtMs || 0, second.videoBoughtMs || 0),
+    gameBoughtMs: Math.max(first.gameBoughtMs || 0, second.gameBoughtMs || 0),
     exerciseMs: Math.max(first.exerciseMs, second.exerciseMs),
     exerciseCalories: Math.max(first.exerciseCalories, second.exerciseCalories),
     pomodoroRounds: rounds.sort((a, b) => a.completedAt - b.completedAt),

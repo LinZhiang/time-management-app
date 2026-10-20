@@ -1,5 +1,13 @@
 import { dateKey, isValidDateKey, nextDayKey, startOfDay } from '../shared/date.ts'
-import { addCategoryTime, addOtherDetail, cloneDay, emptyDay, ensureDay } from '../shared/record.ts'
+import {
+  addCategoryTime,
+  addOtherDetail,
+  cloneDay,
+  emptyDay,
+  ensureDay,
+  entertainmentRemainingMs,
+  extraMsForYuan,
+} from '../shared/record.ts'
 import {
   isEntertainmentCategory,
   isHiddenTimeCategory,
@@ -159,9 +167,7 @@ function ensureEntertainment(store: AppStore) {
 }
 
 function entertainmentRemaining(day: DayRecord, category: 'video' | 'game') {
-  const used = category === 'video' ? day.videoMs || 0 : day.gameMs || 0
-  const limit = category === 'video' ? VIDEO_LIMIT_MS : GAME_LIMIT_MS
-  return Math.max(0, limit - used)
+  return entertainmentRemainingMs(day, category)
 }
 
 function capEntertainmentTimer(store: AppStore, now: number) {
@@ -204,8 +210,10 @@ function entertainmentLive(store: AppStore, now: number): EntertainmentLive {
     balance: store.entertainment.balance,
     videoMs: day.videoMs || 0,
     gameMs: day.gameMs || 0,
-    videoLimitMs: VIDEO_LIMIT_MS,
-    gameLimitMs: GAME_LIMIT_MS,
+    videoBoughtMs: day.videoBoughtMs || 0,
+    gameBoughtMs: day.gameBoughtMs || 0,
+    videoLimitMs: VIDEO_LIMIT_MS + (day.videoBoughtMs || 0),
+    gameLimitMs: GAME_LIMIT_MS + (day.gameBoughtMs || 0),
     videoRemainingMs: entertainmentRemaining(day, 'video'),
     gameRemainingMs: entertainmentRemaining(day, 'game'),
     grantsToday: store.entertainment.bonus[today] || {},
@@ -264,7 +272,7 @@ export function startTimer(
   if (isEntertainmentCategory(category)) {
     const remaining = entertainmentRemaining(ensureDay(store, dateKey(now)), category)
     if (remaining <= 0) {
-      throw new ApiError(400, category === 'video' ? '今日视频时间已达 1 小时上限' : '今日游戏时间已达 30 分钟上限')
+      throw new ApiError(400, category === 'video' ? '今日视频时间已用完，可用娱乐金额加时' : '今日游戏时间已用完，可用娱乐金额加时')
     }
   }
   requireNote(category, otherNote)
@@ -320,6 +328,47 @@ export function deleteTimeModule(store: AppStore, id: string, now = Date.now()) 
   foldCategoryIntoOther(store, id, removed.title)
 }
 
+export function extendEntertainment(
+  store: AppStore,
+  category: string | undefined,
+  amount: number | undefined,
+  now = Date.now(),
+) {
+  if (!category || !isEntertainmentCategory(category)) {
+    throw new ApiError(400, '请选择视频时间或游戏时间')
+  }
+  syncStore(store, now)
+  const yuan = Number(amount)
+  if (!Number.isFinite(yuan) || yuan <= 0) {
+    throw new ApiError(400, '请填写大于 0 的加时金额')
+  }
+  const rounded = roundYuan(yuan)
+  if (rounded > store.entertainment.balance + 1e-9) {
+    throw new ApiError(400, '娱乐金额不足')
+  }
+  const extraMs = extraMsForYuan(category, rounded)
+  if (extraMs <= 0) {
+    throw new ApiError(400, '加时太少，请增加金额')
+  }
+  const day = ensureDay(store, dateKey(now))
+  if (category === 'video') day.videoBoughtMs = (day.videoBoughtMs || 0) + extraMs
+  else day.gameBoughtMs = (day.gameBoughtMs || 0) + extraMs
+  day.hasActivity = true
+  store.entertainment.balance = roundYuan(store.entertainment.balance - rounded)
+  const label = category === 'video' ? '视频时间' : '游戏时间'
+  const extraMinutes = Math.round((extraMs / 60000) * 10) / 10
+  store.entertainment.spends.unshift({
+    id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
+    date: dateKey(now),
+    amount: rounded,
+    createdAt: now,
+    kind: 'extend',
+    category,
+    extraMs,
+    note: `${label} +${extraMinutes}分钟`,
+  })
+}
+
 export function spendEntertainment(store: AppStore, amount: number | undefined, now = Date.now()) {
   syncStore(store, now)
   const yuan = Number(amount)
@@ -336,6 +385,7 @@ export function spendEntertainment(store: AppStore, amount: number | undefined, 
     date: dateKey(now),
     amount: rounded,
     createdAt: now,
+    kind: 'consume',
   })
 }
 
